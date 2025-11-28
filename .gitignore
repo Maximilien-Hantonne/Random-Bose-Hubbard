@@ -1,0 +1,19 @@
+#Ignore folders
+.cache/
+build/
+external/
+
+# VS Code files and folders (both local and remote)
+.vscode/
+.vscode-server/
+**/.vscode/
+**/.vscode-server/
+
+#Ignore various files
+*.o
+*Zone.Identifier
+*.json
+*.txt
+
+
+
