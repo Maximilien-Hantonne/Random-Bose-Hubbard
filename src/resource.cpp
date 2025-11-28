@@ -71,7 +71,6 @@ void Resource::timer() {
 }
 
 
-
 // OPENMP THREADS :
 
 /* Set the number of threads for OpenMP parallelization */
