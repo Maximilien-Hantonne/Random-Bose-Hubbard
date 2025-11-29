@@ -19,7 +19,7 @@ namespace Op
 
 // DIAGONALIZATION : 
 
-    Eigen::VectorXcd IRLM_eigen(Eigen::SparseMatrix<double> O, int nb_eigen, Eigen::MatrixXcd& eigenvectors);
-    Eigen::VectorXd exact_eigen(Eigen::SparseMatrix<double> O, Eigen::MatrixXd& eigenvectors);
+    Eigen::VectorXcd IRLM_eigen(const Eigen::SparseMatrix<double>& O, int nb_eigen, Eigen::MatrixXcd& eigenvectors);
+    Eigen::VectorXd exact_eigen(const Eigen::SparseMatrix<double>& O, Eigen::MatrixXd& eigenvectors);
 
 }

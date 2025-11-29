@@ -2,6 +2,7 @@
 #include<iostream>
 #include<Eigen/Dense>
 #include<Eigen/SparseCore>
+#include<boost/multiprecision/cpp_int.hpp>
 
 #include "hamiltonian.hpp"
 
@@ -12,7 +13,7 @@
     /* ELEMENTARY FUNCTIONS */
 
 /* Calculate the sum of the elements of a vector between 2 index */
-int BH::sum(const Eigen::VectorXd& state, int index1, int index2) { 
+int BH::sum(const Eigen::VectorXi& state, int index1, int index2) { 
 	int s = 0;
 	for (int i = index1; i <= index2; i++) {
 		s += state[i];
@@ -45,7 +46,7 @@ int BH::dimension(int m, int n) {
     /* INITIALIZE THE HILBERT SPACE BASIS */
 
 /* Calculate the next Fock state of the Hilbert space in lexicographic order */
-bool BH::next_lexicographic(Eigen::VectorXd& state, int m, int n) {
+bool BH::next_lexicographic(Eigen::VectorXi& state, int m, int n) {
 	for (int k = m - 2; k > -1; k--) {
 		if (state[k] != 0) {
 			state[k] -= 1;
@@ -60,10 +61,10 @@ bool BH::next_lexicographic(Eigen::VectorXd& state, int m, int n) {
 }
 
 /* Create the matrix that has the Fock states of the Hilbert space basis in columns */
-Eigen::MatrixXd BH::init_lexicographic(int m, int n) {
+Eigen::MatrixXi BH::init_lexicographic(int m, int n) {
     int D = dimension(m, n);
-    Eigen::MatrixXd basis(m, D);
-    Eigen::VectorXd state = Eigen::VectorXd::Zero(m);
+    Eigen::MatrixXi basis(m, D);
+    Eigen::VectorXi state = Eigen::VectorXi::Zero(m);
     state(0) = n;
     int col = 0;
     do {
@@ -76,17 +77,32 @@ Eigen::MatrixXd BH::init_lexicographic(int m, int n) {
     /* SORT THE HILBERT SPACE BASIS TO FACILITATE CALCULUS */
 
 /* Calculate the unique tag of the kth column of the matrix */
-double BH::calculate_tag(const Eigen::MatrixXd& basis, const std::vector<int>& primes, int k) {
-	double tag = 0;
+boost::multiprecision::cpp_int BH::calculate_tag(const Eigen::MatrixXi& basis, const std::vector<int>& primes, int k) {
+	boost::multiprecision::cpp_int tag = 1;
 	for (int i = 0; i < basis.rows(); i++) {
-		tag += basis.coeff(i, k) * log(primes[i]);
+		unsigned int occupation = basis.coeff(i, k);
+		if (occupation > 0) {
+			tag *= boost::multiprecision::pow(boost::multiprecision::cpp_int(primes[i]), occupation);
+		}
 	}
 	return tag;
 }
 
+/* Calculate the tag of a state */
+boost::multiprecision::cpp_int BH::calculate_tag(const Eigen::VectorXi& state, const std::vector<int>& primes) {
+    boost::multiprecision::cpp_int tag = 1;
+    for (int i = 0; i < state.size(); i++) {
+        unsigned int occupation = state[i];
+        if (occupation > 0) {
+            tag *= boost::multiprecision::pow(boost::multiprecision::cpp_int(primes[i]), occupation);
+        }
+    }
+    return tag;
+}
+
 /* Calculate and store the tags of each state of the Hilbert space basis */
-Eigen::VectorXd BH::calculate_tags(const Eigen::MatrixXd& basis, const std::vector<int>& primes) {
-	Eigen::VectorXd tags(basis.cols());
+std::vector<boost::multiprecision::cpp_int> BH::calculate_tags(const Eigen::MatrixXi& basis, const std::vector<int>& primes) {
+	std::vector<boost::multiprecision::cpp_int> tags(basis.cols());
 	for (int i = 0; i < basis.cols(); i++) {
 		tags[i] = calculate_tag(basis, primes, i);
 	}
@@ -94,7 +110,7 @@ Eigen::VectorXd BH::calculate_tags(const Eigen::MatrixXd& basis, const std::vect
 }
 
 /* Sort the states of the Hilbert space by ascending order compared by their tags*/
-void BH::sort_basis(Eigen::VectorXd& tags, Eigen::MatrixXd& basis) {
+void BH::sort_basis(std::vector<boost::multiprecision::cpp_int>& tags, Eigen::MatrixXi& basis) {
     std::vector<int> indices(tags.size());
     for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
         indices[i] = i;
@@ -111,11 +127,11 @@ void BH::sort_basis(Eigen::VectorXd& tags, Eigen::MatrixXd& basis) {
 }
 
 /* Gives the index of the wanted tag x by the Newton method */
-int BH::search_tag(const Eigen::VectorXd& tags, double x) {
+int BH::search_tag(const std::vector<boost::multiprecision::cpp_int>& tags, const boost::multiprecision::cpp_int& x) {
 	int a = 0;
 	int b = tags.size() - 1;
 	int m = (a + b) / 2;
-	while (fabs(tags[m] - x) > 1e-3 && a <= b) {
+	while (tags[m] != x && a <= b) {
 		if (tags[m] < x) {
 			a = m + 1;
 		}
@@ -128,23 +144,23 @@ int BH::search_tag(const Eigen::VectorXd& tags, double x) {
 }
 
 /* Create the matrix that has the Fock states of the Hilbert space basis in columns sorted by tags with their unique tag */
-std::pair<Eigen::VectorXd, Eigen::MatrixXd> BH::fixed_set_basis(int m, int n) {
+std::pair<std::vector<boost::multiprecision::cpp_int>, Eigen::MatrixXi> BH::fixed_set_basis(int m, int n) {
     std::vector<int> primes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97 };
-    Eigen::MatrixXd basis = init_lexicographic(m, n);
-    Eigen::VectorXd tags = calculate_tags(basis, primes);
+    Eigen::MatrixXi basis = init_lexicographic(m, n);
+    std::vector<boost::multiprecision::cpp_int> tags = calculate_tags(basis, primes);
     sort_basis(tags, basis);
     return std::make_pair(tags, basis);
 }
 
 /* Create the matrix that has the Fock states of the Hilbert space basis in columns sorted by tags with their unique tag */
-std::pair<Eigen::VectorXd, Eigen::MatrixXd> BH::max_set_basis(int m, int n) {
-    Eigen::VectorXd tags;
-    Eigen::MatrixXd basis(m, 0);
+std::pair<std::vector<boost::multiprecision::cpp_int>, Eigen::MatrixXi> BH::max_set_basis(int m, int n) {
+    std::vector<boost::multiprecision::cpp_int> tags;
+    Eigen::MatrixXi basis(m, 0);
     for (int bosons = 1; bosons <= n; ++bosons) {
         auto [fixed_tags, fixed_basis] = fixed_set_basis(m, bosons);
         int old_size = tags.size();
-        tags.conservativeResize(old_size + fixed_tags.size());
-        tags.segment(old_size, fixed_tags.size()) = fixed_tags;
+        tags.resize(old_size + fixed_tags.size());
+        std::copy(fixed_tags.begin(), fixed_tags.end(), tags.begin() + old_size);
         int old_cols = basis.cols();
         basis.conservativeResize(Eigen::NoChange, old_cols + fixed_basis.cols());
         basis.block(0, old_cols, basis.rows(), fixed_basis.cols()) = fixed_basis;
@@ -155,19 +171,19 @@ std::pair<Eigen::VectorXd, Eigen::MatrixXd> BH::max_set_basis(int m, int n) {
     /* FILL THE HAMILTONIAN OF THE SYSTEM */
 
 /* Fill the hopping term of the Hamiltonian */
-void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double J) {
+void BH::fill_hopping(const Eigen::MatrixXi& basis, const std::vector<boost::multiprecision::cpp_int>& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double J) {
     std::vector<Eigen::Triplet<double>> tripletList;
     tripletList.reserve(basis.cols() * basis.rows() * neighbours.size());
     for (int k = 0; k < basis.cols(); k++) {
         for (int i = 0; i < static_cast<int>(neighbours.size()); i++) {
             for (int j = 0; j < static_cast<int>(neighbours[i].size()); j++) {
-                Eigen::VectorXd state = basis.col(k);
+                Eigen::VectorXi state = basis.col(k);
                 if (basis.coeff(i, k) >= 0 && basis.coeff(j, k) >= 1) {
                     state[i] += 1;
                     state[j] -= 1;
-                    double x = calculate_tag(state, primes, i);
+                    boost::multiprecision::cpp_int x = calculate_tag(state, primes);
                     int index = search_tag(tags, x);
-                    assert(index >= 0 && index < tags.size()); // Add assertion to check index bounds
+                    assert(index >= 0 && index < static_cast<int>(tags.size())); // Add assertion to check index bounds
                     double value = sqrt((basis.coeff(i, k) + 1) * basis.coeff(j, k));
                     tripletList.push_back(Eigen::Triplet<double>(index, k, -J * value));
                     tripletList.push_back(Eigen::Triplet<double>(k, index, -J * value));
@@ -179,7 +195,7 @@ void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags,
 }
 
 /* Fill the interaction term of the Hamiltonian */
-void BH::fill_interaction(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>& hmatrix, double U) {
+void BH::fill_interaction(const Eigen::MatrixXi& basis, Eigen::SparseMatrix<double>& hmatrix, double U) {
 	std::vector<Eigen::Triplet<double>> tripletList;
 	tripletList.reserve(hmatrix.nonZeros() + basis.cols());
 	for (int k = 0; k < hmatrix.outerSize(); ++k) {
@@ -199,7 +215,7 @@ void BH::fill_interaction(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<doub
 }
 
 /* Fill the chemical potential term of the Hamiltonian */
-void BH::fill_chemical(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>& hmatrix, double mu) {
+void BH::fill_chemical(const Eigen::MatrixXi& basis, Eigen::SparseMatrix<double>& hmatrix, double mu) {
 	std::vector<Eigen::Triplet<double>> tripletList;
 	tripletList.reserve(hmatrix.nonZeros() + basis.cols());
 	for (int k = 0; k < hmatrix.outerSize(); ++k) {
@@ -207,7 +223,6 @@ void BH::fill_chemical(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>
 			tripletList.push_back(Eigen::Triplet<double>(it.row(), it.col(), it.value()));
 		}
 	}
-    std::vector<Eigen::Triplet<double>> tripletList2;
 	for (int k = 0; k < basis.cols(); k++) {
 		double value = 0;
 		for (int i = 0; i < basis.rows(); i++) {
@@ -223,7 +238,7 @@ void BH::fill_chemical(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>
     /* HAMILTONIAN MATRICES */
 
 /* Create the Hamiltonian with a fixed number of bosons */
-Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double J, double U, double mu) {
+Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXi& basis, const std::vector<boost::multiprecision::cpp_int>& tags, int m, int n, double J, double U, double mu) {
     int D = dimension(m, n);
     Eigen::SparseMatrix<double> H(D,D);
     H.setZero();

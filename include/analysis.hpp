@@ -3,6 +3,7 @@
 #include <complex>
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
+#include <boost/multiprecision/cpp_int.hpp>
 
 
 namespace Analysis
@@ -10,7 +11,7 @@ namespace Analysis
             ///// EXACT CALCULATIONS /////
 
 /* Calculate the gap ratios, spdm, boson density, and compressibility for a range of parameters */
-static void calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double> H_fixed, const Eigen::SparseMatrix<double> H1, const Eigen::SparseMatrix<double> H2, std::string fixed_param, double fixed_value, double param1_min, double param1_max, double param2_min, double param2_max, double param1_step, double param2_step);
+static void calculate_and_save(const Eigen::MatrixXi& basis, const std::vector<boost::multiprecision::cpp_int>& tags, const Eigen::SparseMatrix<double>& H_fixed, const Eigen::SparseMatrix<double>& H1, const Eigen::SparseMatrix<double>& H2, const std::string& fixed_param, double fixed_value, double param1_min, double param1_max, double param2_min, double param2_max, double param1_step, double param2_step);
 
 // GAP RATIOS
 
@@ -20,7 +21,7 @@ static Eigen::VectorXd gap_ratios(Eigen::VectorXcd eigenvalues, int nb_eigen);
 // SPDM FUNCTIONS
 
 /* Calculate the single-particle density matrix of the system */
-static Eigen::MatrixXcd SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, Eigen::MatrixXcd& eigenvectors);
+static Eigen::MatrixXcd SPDM(const Eigen::MatrixXi& basis, const std::vector<boost::multiprecision::cpp_int>& tags, Eigen::MatrixXcd& eigenvectors);
 
 /* Calculate the compressibility of the system */
 static double coherence(const Eigen::MatrixXcd& spdm);
@@ -28,7 +29,7 @@ static double coherence(const Eigen::MatrixXcd& spdm);
 // MEAN VALUE CALCULATIONS
 
 /* Calculate the mean value of the annihilation operator <n|ai+ aj|n> */
-static std::complex<double> braket(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int i, int j);
+static std::complex<double> braket(const Eigen::VectorXcd& phi0, const Eigen::MatrixXi& basis, const std::vector<boost::multiprecision::cpp_int>& tags, int i, int j);
 
 // PCA FUNCTIONS
 
@@ -46,5 +47,5 @@ static void save_matrices_to_csv(const std::string& filename, const std::vector<
 /* save the dispersions to a file */
 static void save_dispersions(const std::string& filename, const std::vector<double>& dispersions);
 
-void exact_parameters(int m, int n, double J, double U, double mu, double s, double r, std::string fixed_param);
+void exact_parameters(int m, int n, double J, double U, double mu, double s, double r, const std::string& fixed_param);
 }

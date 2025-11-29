@@ -14,8 +14,7 @@ namespace Resource
     void timer();
     void set_omp_threads(const Eigen::SparseMatrix<double>& matrix1, int nb_matrix);
 
-    static std::chrono::high_resolution_clock::time_point start_time;
-    static bool is_running = false;
-
+    extern std::chrono::high_resolution_clock::time_point start_time;
+    extern bool is_running;
 }
 

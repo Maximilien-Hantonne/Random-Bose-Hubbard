@@ -29,8 +29,8 @@ void print_usage() {
 int main(int argc, char *argv[]) {
 
     // PARAMETERS OF THE MODEL
-    int m, n;
-    double J, U, mu, s, r;
+    int m = 0, n = 0;
+    double J = 0.0, U = 0.0, mu = 0.0, s = 0.0, r = 0.0;
     std::string fixed_param;
 
     const char* const short_opts = "m:n:J:U:u:r:s:f:h";
