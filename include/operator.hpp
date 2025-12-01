@@ -14,7 +14,7 @@ namespace Op
 // DIAGONALIZATION : 
 
     /* sort eigenvalues and eigenvectors in descending order */
-    void sort_eigen(Eigen::VectorXd& eigenvalues, Eigen::MatrixXd& eigenvectors);
+    void sort_eigen(Eigen::VectorXcd& eigenvalues, Eigen::MatrixXcd& eigenvectors);
 
 
 // DIAGONALIZATION : 

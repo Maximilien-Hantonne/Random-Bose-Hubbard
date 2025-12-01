@@ -1,5 +1,8 @@
 #include<vector>
 #include<iostream>
+#include<random>
+#include<map>
+#include<utility>
 #include<Eigen/Dense>
 #include<Eigen/SparseCore>
 
@@ -84,6 +87,16 @@ double BH::calculate_tag(const Eigen::MatrixXd& basis, const std::vector<int>& p
 	return tag;
 }
 
+/* Calculate the unique tag of a state */
+double BH::calculate_tag(const Eigen::VectorXd& state, const std::vector<int>& primes) {
+    double tag = 0;
+    for (int i = 0; i < state.size(); i++) {
+        tag += state[i] * log(primes[i]);
+    }
+    return tag;
+}
+
+
 /* Calculate and store the tags of each state of the Hilbert space basis */
 Eigen::VectorXd BH::calculate_tags(const Eigen::MatrixXd& basis, const std::vector<int>& primes) {
 	Eigen::VectorXd tags(basis.cols());
@@ -155,7 +168,7 @@ std::pair<Eigen::VectorXd, Eigen::MatrixXd> BH::max_set_basis(int m, int n) {
     /* FILL THE HAMILTONIAN OF THE SYSTEM */
 
 /* Fill the hopping term of the Hamiltonian */
-void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double J) {
+void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double T) {
     std::vector<Eigen::Triplet<double>> tripletList;
     tripletList.reserve(basis.cols() * basis.rows() * neighbours.size());
     for (int k = 0; k < basis.cols(); k++) {
@@ -169,8 +182,8 @@ void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags,
                     int index = search_tag(tags, x);
                     assert(index >= 0 && index < tags.size()); // Add assertion to check index bounds
                     double value = sqrt((basis.coeff(i, k) + 1) * basis.coeff(j, k));
-                    tripletList.push_back(Eigen::Triplet<double>(index, k, -J * value));
-                    tripletList.push_back(Eigen::Triplet<double>(k, index, -J * value));
+                    tripletList.push_back(Eigen::Triplet<double>(index, k, -T * value));
+                    tripletList.push_back(Eigen::Triplet<double>(k, index, -T * value));
                 }
             }
         }
@@ -223,13 +236,13 @@ void BH::fill_chemical(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>
     /* HAMILTONIAN MATRICES */
 
 /* Create the Hamiltonian with a fixed number of bosons */
-Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double J, double U, double mu) {
+Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double T, double U, double mu) {
     int D = dimension(m, n);
     Eigen::SparseMatrix<double> H(D,D);
     H.setZero();
-    if (std::abs(J-0.0) > std::numeric_limits<double>::epsilon()) {
+    if (std::abs(T-0.0) > std::numeric_limits<double>::epsilon()) {
         std::vector<int> primes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97 };
-        fill_hopping(basis, tags, neighbours, primes, H, J);
+        fill_hopping(basis, tags, neighbours, primes, H, T);
     }
     else if  (std::abs(U-0.0) > std::numeric_limits<double>::epsilon()) {
         fill_interaction(basis, H, U);
@@ -238,14 +251,14 @@ Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::
         fill_chemical(basis, H, mu);
     }
     else{
-        std::cerr << "Error: At least one of the parameters J, U, mu must be different from zero." << std::endl;
+        std::cerr << "Error: At least one of the parameters T, U, mu must be different from zero." << std::endl;
     }
     return H;
 }
 
 
 /* Create the Hamiltonian with Fock states from 1 to n bosons */
-Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double J, double U, double mu) {
+Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double T, double U, double mu) {
     int total_dimension = 0;
     std::vector<Eigen::SparseMatrix<double>> hamiltonians;
     if (n_min < 0) {
@@ -256,7 +269,7 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
     }
     for (int bosons = n_min; bosons <= n_max; ++bosons) {
         auto [fixed_tags, fixed_basis] = fixed_set_basis(m, bosons);
-        Eigen::SparseMatrix<double> hmatrix = fixed_bosons_hamiltonian(neighbours, fixed_basis, fixed_tags, m, bosons, J, U, mu);
+        Eigen::SparseMatrix<double> hmatrix = fixed_bosons_hamiltonian(neighbours, fixed_basis, fixed_tags, m, bosons, T, U, mu);
         hamiltonians.push_back(hmatrix);
         total_dimension += hmatrix.rows();
     }
@@ -273,4 +286,36 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
     }
     combined_hamiltonian.setFromTriplets(tripletList.begin(), tripletList.end());
     return combined_hamiltonian;
+}
+
+
+    /* RANDOMIZE HAMILTONIAN */
+
+/* Randomize a Hamiltonian matrix around a value with gaussian distribution of given variance */
+Eigen::SparseMatrix<double> BH::randomize_h(Eigen::SparseMatrix<double>& H, double param, double sigma) {
+    if (sigma <= 0.0) {
+        H = H * param;
+        return H;
+    }
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::normal_distribution<double> dist(param, sigma);
+    
+    std::map<std::pair<int, int>, double> random_coeffs;
+    
+    for (int k = 0; k < H.outerSize(); ++k) {
+        for (Eigen::SparseMatrix<double>::InnerIterator it(H, k); it; ++it) {
+            int row = it.row();
+            int col = it.col();
+            double random_coeff;
+            if (row <= col) {
+                random_coeff = dist(gen);
+                random_coeffs[{row, col}] = random_coeff;
+            } else {
+                random_coeff = random_coeffs[{col, row}];
+            }
+            it.valueRef() *= random_coeff;
+        }
+    }
+    return H;
 }

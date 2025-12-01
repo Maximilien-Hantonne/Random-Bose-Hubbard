@@ -42,7 +42,8 @@ void Neighbours::square_neighbours(bool closed) { // by default closed = true fo
     if (side * side != m) {
         throw std::invalid_argument("The number of sites (m) must be a perfect square.");
     }
-    std::vector<std::vector<int>> neighbours(m);
+    neighbours.clear();
+    neighbours.resize(m);
     for (int i = 0; i < side; ++i) {
         for (int j = 0; j < side; ++j) {
             int index = i * side + j;
@@ -79,7 +80,8 @@ void Neighbours::cube_neighbours(bool closed){ // by default closed = true for p
     if (side * side * side != m) {
         throw std::invalid_argument("The number of sites (m) must be a perfect cube.");
     }
-    std::vector<std::vector<int>> neighbours(m);
+    neighbours.clear();
+    neighbours.resize(m);
     for (int i = 0; i < side; ++i) {
         for (int j = 0; j < side; ++j) {
             for (int k = 0; k < side; ++k) {

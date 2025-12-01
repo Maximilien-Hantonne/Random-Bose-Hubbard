@@ -8,221 +8,129 @@ import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter
 
 
+def wrap_title(title, width=30):
+    return "\n".join(textwrap.wrap(title, width))
 
-################## PHASE MAP ##################
+def load_phase_data():
+    with open('phase.txt', 'r') as file:
+        fixed_param_line = file.readline().strip().split()
+        fixed_param = fixed_param_line[0]
+        fixed_value = float(fixed_param_line[1])
+        data = np.loadtxt(file)
+    return fixed_param, fixed_value, data
 
-# Read the data from the file
-with open('phase.txt', 'r') as file:
-    fixed_param_line = file.readline().strip().split()
-    fixed_param = fixed_param_line[0]
-    fixed_value = float(fixed_param_line[1])
-    data = np.loadtxt(file)
+def get_parameter_labels(fixed_param):
+    if fixed_param == "T":
+        return 'Interaction Strength (U)', 'Chemical Potential ($\\mu$)', 'U', '$\\mu$'
+    elif fixed_param == "U":
+        return 'Hopping Parameter (t)', 'Chemical Potential ($\\mu$)', 't', '$\\mu$'
+    elif fixed_param == "u":
+        return 'Hopping Parameter (t)', 'Interaction Strength (U)', 't', 'U'
+    else:
+        raise ValueError("Invalid fixed parameter in phase.txt")
 
-# Extract J, mu, U, gap_ratio, condensate fraction, and coherence
-if fixed_param == "J":
-    x_label = 'Interaction Strength (U)'
-    y_label = 'Chemical Potential (mu)'
-    x_values = data[:, 0] 
-    y_values = data[:, 1] 
-    non_fixed_param1 = 'U'
-    non_fixed_param2 = 'mu'
-elif fixed_param == "U":
-    x_label = 'Hopping Parameter (J)'
-    y_label = 'Chemical Potential (mu)'
-    x_values = data[:, 0] 
-    y_values = data[:, 1] 
-    non_fixed_param1 = 'J'
-    non_fixed_param2 = 'mu'
-elif fixed_param == "u":
-    x_label = 'Hopping Parameter (J)'
-    y_label = 'Interaction Strength (U)'
-    x_values = data[:, 0] 
-    y_values = data[:, 1] 
-    non_fixed_param1 = 'J'
-    non_fixed_param2 = 'U'
-else:
-    raise ValueError("Invalid fixed parameter in phase.txt")
+def load_eigenvalues():
+    if not os.path.exists('eigenvalues_diagonal.txt'):
+        return None, None, None
+    with open('eigenvalues_diagonal.txt', 'r') as f:
+        header = f.readline().strip()
+        eigen_data = np.loadtxt(f)
+    if eigen_data.size == 0:
+        return None, None, None
+    if eigen_data.ndim == 1:
+        eigen_data = eigen_data.reshape(1, -1)
+    ratios = eigen_data[:, 0]
+    eigenvalues = eigen_data[:, 1:]
+    sort_idx = np.argsort(ratios)
+    return ratios[sort_idx], eigenvalues[sort_idx], header
 
-# Calculate min and max values for non-fixed parameters
-param1_min = np.min(data[:, 0])
-param1_max = np.max(data[:, 0])
-param2_min = np.min(data[:, 1])
-param2_max = np.max(data[:, 1])
+def plot_phase_map(x_grid, y_grid, data_grid, label, x_label, y_label, output_dir, filename, title, note=None):
+    plt.figure(figsize=(10, 6))
+    plt.contourf(x_grid, y_grid, data_grid, levels=50, cmap='viridis')
+    cbar = plt.colorbar(label=label)
+    if label == 'Gap Ratio':
+        cbar.ax.axhline(y=0.39, color='red', linestyle='solid', linewidth=3)
+        cbar.ax.axhline(y=0.53, color='red', linestyle='solid', linewidth=3)
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xlim(x_grid.min(), x_grid.max())
+    plt.ylim(y_grid.min(), y_grid.max())
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.title(wrap_title(title), fontsize=12)
+    if note:
+        plt.figtext(0.5, 0.01, note, ha='center', fontsize=9, color='red')
+    plt.savefig(os.path.join(output_dir, filename))
+    plt.show()
+    plt.close()
 
-# Extract the gap ratio, condensate fraction, and coherence
+def plot_eigenvalues(ratios, eigenvalues, header, output_dir):
+    plt.figure(figsize=(12, 8))
+    for i in range(min(10, eigenvalues.shape[1])):
+        plt.plot(ratios, eigenvalues[:, i], '_', markersize=10, markeredgewidth=2)
+    plt.xscale('log')
+    y_min = np.min(eigenvalues)
+    y_max = np.max(eigenvalues)
+    plt.yscale('symlog', linthresh=10)
+    plt.ylim(y_min, y_max)
+    xlabel = header.split()[2].replace('T', 't')
+    plt.xlabel(xlabel)
+    plt.ylabel('Energy')
+    plt.title('First Eigenvalues Evolution')
+    plt.grid(True, alpha=0.3, which='both')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'eigenvalues_evolution.svg'), bbox_inches='tight')
+    plt.show()
+    plt.close()
+
+# Load data
+ratios, eigenvalues, header = load_eigenvalues()
+fixed_param, fixed_value, data = load_phase_data()
+x_label, y_label, non_fixed_param1, non_fixed_param2 = get_parameter_labels(fixed_param)
+
+# Extract data columns
+x_values = data[:, 0]
+y_values = data[:, 1]
 gap_ratio = data[:, 2]
 condensate_fraction = data[:, 3]
-coherence = data[:, 4]
+fluctuations = data[:, 4]
 
-# Create a grid for x and y
+# Calculate parameter ranges
+param1_min = np.min(x_values)
+param1_max = np.max(x_values)
+param2_min = np.min(y_values)
+param2_max = np.max(y_values)
+
+# Create grids
 x_unique = np.unique(x_values)
 y_unique = np.unique(y_values)
 x_grid, y_grid = np.meshgrid(x_unique, y_unique)
 
-# Reshape the data arrays to match the grid shape (flatten them for later reshaping)
+# Reshape data to grid
 gap_ratio_grid = gap_ratio.reshape(len(y_unique), len(x_unique))
 condensate_fraction_grid = condensate_fraction.reshape(len(y_unique), len(x_unique))
-coherence_grid = coherence.reshape(len(y_unique), len(x_unique))
+fluctuations_grid = fluctuations.reshape(len(y_unique), len(x_unique))
 
-# Apply Gaussian blur for better smoothing (lissage)
-sigma = 2  # Adjust the value of sigma for more/less blur
+# Apply smoothing
+sigma = 2
 gap_ratio_blurred = gaussian_filter(gap_ratio_grid, sigma=sigma)
 condensate_fraction_blurred = gaussian_filter(condensate_fraction_grid, sigma=sigma)
-coherence_blurred = gaussian_filter(coherence_grid, sigma=sigma)
+fluctuations_blurred = gaussian_filter(fluctuations_grid, sigma=sigma)
 
-# Function to wrap long titles
-def wrap_title(title, width=30):
-    return "\n".join(textwrap.wrap(title, width))
-
-# Create the directory to save the plots
-output_dir = f'../figures/exact/{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}'
+# Create output directory
+output_dir = f'figures/{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}'
 os.makedirs(output_dir, exist_ok=True)
 
-# Plot and save the gap ratio plot
-plt.figure(figsize=(10, 6))
-plt.contourf(x_grid, y_grid, gap_ratio_blurred, levels=50, cmap='viridis')
-cbar1 = plt.colorbar(label='Gap Ratio')
-cbar1.ax.axhline(y=0.39, color='red', linestyle='solid', linewidth=3)
-cbar1.ax.axhline(y=0.53, color='red', linestyle='solid', linewidth=3)
-plt.xlabel(x_label)
-plt.ylabel(y_label)
-plt.title(wrap_title('Gap Ratio with respect to {} and {}'.format(x_label, y_label)), fontsize=12)
-plt.figtext(0.5, 0.01, 'Note: 0.39 is for a Poissonnian distribution and 0.53 is for a Gaussian orthogonal ensemble (GOE)', ha='center', fontsize=9, color='red')
-plt.savefig(os.path.join(output_dir, 'gap_ratio_plot.svg'))  # Save as SVG
-plt.show()
-plt.close()
+# Generate phase map plots
+plot_eigenvalues(ratios, eigenvalues, header, output_dir)
 
-# Plot and save the condensate fraction plot
-plt.figure(figsize=(10, 6))
-plt.contourf(x_grid, y_grid, condensate_fraction_blurred, levels=50, cmap='viridis')
-cbar2 = plt.colorbar(label='Condensate Fraction')
-plt.xlabel(x_label)
-plt.ylabel(y_label)
-plt.title(wrap_title('Condensate fraction with respect to {} and {}'.format(x_label, y_label)), fontsize=12)
-plt.savefig(os.path.join(output_dir, 'condensate_fraction_plot.svg'))  # Save as SVG
-plt.show()
-plt.close()
+plot_phase_map(x_grid, y_grid, gap_ratio_blurred, 'Gap Ratio', x_label, y_label, output_dir, 
+               'gap_ratio_plot.svg', f'Gap Ratio with respect to {x_label} and {y_label}',
+               'Note: 0.39 is for a Poissonnian distribution and 0.53 is for a Gaussian orthogonal ensemble (GOE)')
 
-# Plot and save the coherence plot
-plt.figure(figsize=(10, 6))
-plt.contourf(x_grid, y_grid, coherence_blurred, levels=50, cmap='viridis')
-cbar3 = plt.colorbar(label='Coherence in Boson Density')
-plt.xlabel(x_label)
-plt.ylabel(y_label)
-plt.title(wrap_title('Coherence with respect to {} and {}'.format(x_label, y_label)), fontsize=12)
-plt.savefig(os.path.join(output_dir, 'coherence_plot.svg'))  # Save as SVG
-plt.show()
-plt.close()
+plot_phase_map(x_grid, y_grid, condensate_fraction_blurred, 'Condensate Fraction', x_label, y_label, output_dir,
+               'condensate_fraction_plot.svg', f'Condensate fraction with respect to {x_label} and {y_label}')
 
+plot_phase_map(x_grid, y_grid, fluctuations_blurred, 'Fluctuations in Boson Number', x_label, y_label, output_dir,
+               'coherence_plot.svg', f'Fluctuations with respect to {x_label} and {y_label}')
 
-
-
-
-################## PCA ##################
-
-
-# # Load the PCA results
-# pca_matrices = []
-# with open('pca_results.csv', 'r') as file:
-#     lines = file.readlines()
-#     current_matrix = []
-#     for line in lines:
-#         if line.startswith("PCA"):
-#             if current_matrix:
-#                 pca_matrices.append(np.array(current_matrix))
-#                 current_matrix = []
-#         elif line.strip():  # Check if the line is not empty
-#             current_matrix.append([float(x) for x in line.strip().split(',')])
-#     if current_matrix:
-#         pca_matrices.append(np.array(current_matrix))
-
-# # Load the dispersion values
-# dispersions = []
-# with open('dispersions.csv', 'r') as file:
-#     lines = iter(file.readlines())
-#     for line in lines:
-#         if line.startswith("Dispersion"):
-#             try:
-#                 dispersion_line = next(lines).strip()
-#                 dispersion = float(dispersion_line)
-#                 dispersions.append(dispersion)
-#             except StopIteration:
-#                 break
-
-# # Load the cluster labels
-# cluster_labels = []
-# with open('cluster_labels.csv', 'r') as file:
-#     lines = file.readlines()
-#     current_labels = []
-#     for line in lines:
-#         if line.startswith("Clusters"):
-#             if current_labels:
-#                 cluster_labels.append(np.array(current_labels))
-#                 current_labels = []
-#         elif line.strip():  # Check if the line is not empty
-#             current_labels.append(int(line.strip()))
-#     if current_labels:
-#         cluster_labels.append(np.array(current_labels))
-
-# # Create the animation for PCA results
-# fig, ax = plt.subplots(figsize=(10, 8))
-
-# def update_pca(frame):
-#     ax.clear()
-#     projected_data = pca_matrices[frame]
-#     clusters = cluster_labels[frame]
-#     dispersion = dispersions[frame]
-#     scatter = ax.scatter(projected_data[:, 0], projected_data[:, 1], c=clusters, cmap='viridis', marker='o', edgecolor='k', alpha=0.7)
-#     ax.set_title(f'Projection onto the First Two Principal Components \n (Dispersion: {dispersion:.4f}) \n \n \n', fontsize=12)
-#     ax.set_xlabel('Principal Component 1')
-#     ax.set_ylabel('Principal Component 2')
-#     ax.grid(True)
-#     ax.legend(*scatter.legend_elements(), title="Clusters")
-#     plt.figtext(0.52, 0.9, 'Weak correlations in superfluid phase (projections appear to be randomly distributed) \n Strong correlations in Mott insulator phase (projections appear to be aligned)', ha='center', fontsize=10, color='red')
-#     return scatter,
-
-# ani_pca = animation.FuncAnimation(fig, update_pca, frames=len(pca_matrices), blit=False, repeat=False)
-
-# # Save the PCA animation
-# ani_pca.save(os.path.join(output_dir, 'pca_animation.gif'), writer='pillow', fps=1.5)
-
-# plt.show()
-
-
-
-# ################## SPDM ##################
-
-
-# # Load the SPDM matrices
-# spdm_matrices = []
-# with open('spdm_matrices.csv', 'r') as file:
-#     lines = file.readlines()
-#     current_matrix = []
-#     for line in lines:
-#         if line.startswith("Matrix"):
-#             if current_matrix:
-#                 spdm_matrices.append(np.array(current_matrix))
-#                 current_matrix = []
-#         elif line.strip():  # Check if the line is not empty
-#             current_matrix.append([float(x) for x in line.strip().split(',')])
-#     if current_matrix:
-#         spdm_matrices.append(np.array(current_matrix))
-
-# # Create the animation for SPDM matrices
-# fig, ax = plt.subplots(figsize=(10, 8))
-# cax = ax.matshow(spdm_matrices[0], cmap='viridis')
-# fig.colorbar(cax)
-
-# def update_spdm(frame):
-#     ax.clear()
-#     matrix = spdm_matrices[frame]
-#     cax = ax.matshow(matrix, cmap='viridis')
-#     ax.set_title(f'SPDM Matrix {frame}')
-#     return cax,
-
-# ani_spdm = animation.FuncAnimation(fig, update_spdm, frames=len(spdm_matrices), blit=False, repeat=False)
-
-# # Save the SPDM animation
-# ani_spdm.save(os.path.join(output_dir, 'spdm_matrices.gif'), writer='pillow', fps=1.5)
-
-# plt.show()

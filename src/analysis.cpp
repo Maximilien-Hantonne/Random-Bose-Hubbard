@@ -3,7 +3,6 @@
 #include <limits>
 #include <complex>
 #include <fstream>
-#include <numeric>
 #include <iostream>
 #include <algorithm>
 
@@ -33,20 +32,20 @@
  *
  * @param m The number of lattice sites.
  * @param n The number of bosons.
- * @param J The hopping parameter.
+ * @param T The hopping parameter.
  * @param U The on-site interaction parameter.
  * @param mu The chemical potential.
  * @param s The step size for the parameter sweep.
  * @param r The range for the parameter sweep.
- * @param fixed_param The parameter to be fixed during the calculations ("J", "U", or "mu").
+ * @param fixed_param The parameter to be fixed during the calculations ("T", "U", or "mu").
  */
 
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(int m, int n, double J,double U, double mu, double s, double r, std::string fixed_param) {
+void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double sigma_u) {
     
     // Prerequisites
-    if (std::abs(J-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
-        std::cerr << "Error: At least one of the parameters J, U, mu must be different from zero." << std::endl;
+    if (std::abs(T-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
+        std::cerr << "Error: At least one of the parameters T, U, mu must be different from zero." << std::endl;
         return;
     }
 
@@ -56,6 +55,7 @@ void Analysis::exact_parameters(int m, int n, double J,double U, double mu, doub
     // Set the geometry of the lattice
     Neighbours neighbours(m);
     neighbours.chain_neighbours();
+    // neighbours.square_neighbours();
     const std::vector<std::vector<int>>& nei = neighbours.getNeighbours();
 
     // // Set the matrices for each term of the Hamiltonian in the Fock states from 1 to n bosons
@@ -67,30 +67,28 @@ void Analysis::exact_parameters(int m, int n, double J,double U, double mu, doub
     
     // Set the Fock states basis with a fixed number of bosons with their tags
     auto [tags, basis] = BH::fixed_set_basis(m, n);
-
-    // Set the matrices for each term of the Hamiltonian in the Fock states with n bosons
-    Eigen::SparseMatrix<double> JH = BH::fixed_bosons_hamiltonian(nei, basis, tags, m, n, 1, 0, 0);
+    Eigen::SparseMatrix<double> TH = BH::fixed_bosons_hamiltonian(nei, basis, tags, m, n, 1, 0, 0);
     Eigen::SparseMatrix<double> UH = BH::fixed_bosons_hamiltonian(nei, basis, tags, m, n, 0, 1, 0);
     Eigen::SparseMatrix<double> uH = BH::fixed_bosons_hamiltonian(nei, basis, tags, m, n, 0, 0, 1);
 
     // Set the number of threads for the calculations
-    Resource::set_omp_threads(JH, 3);
+    Resource::set_omp_threads(TH, 3);
 
     // Set the range of parameters for the calculations
-    double J_min = J, J_max = J + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
+    double T_min = T, T_max = T + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
 
     // Calculate the exact parameters
-    if (fixed_param == "J") {
-        JH = JH * J;
-        calculate_and_save(basis, tags, JH, UH, uH, fixed_param, J, J_min, J_max, mu_min, mu_max, s, s);
+    if (fixed_param == "T") {
+        TH = TH * T;
+        calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_u);
     }
     else if (fixed_param == "U") {
         UH = UH * U;
-        calculate_and_save(basis, tags, UH, JH, uH, fixed_param, U, J_min, J_max, U_min, U_max, s, s);
+        calculate_and_save(basis, tags, UH, TH, uH, fixed_param, U, T_min, T_max, mu_min, mu_max, s, s, sigma_t, sigma_u);
     }
     else{
         uH = uH * mu;
-        calculate_and_save(basis, tags, uH, JH, UH, fixed_param, mu, J_min, J_max, mu_min, mu_max, s, s);
+        calculate_and_save(basis, tags, uH, TH, UH, fixed_param, mu, T_min, T_max, U_min, U_max, s, s, sigma_t, sigma_u);
     }
 
     // End of the calculations
@@ -103,7 +101,7 @@ void Analysis::exact_parameters(int m, int n, double J,double U, double mu, doub
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double> H_fixed, const Eigen::SparseMatrix<double> H1, const Eigen::SparseMatrix<double> H2, std::string fixed_param, double fixed_value, double param1_min, double param1_max, double param2_min, double param2_max, double param1_step, double param2_step) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, Eigen::SparseMatrix<double> H_fixed, Eigen::SparseMatrix<double> H1, Eigen::SparseMatrix<double> H2, std::string fixed_param, double fixed_value, double param1_min, double param1_max, double param2_min, double param2_max, double param1_step, double param2_step, double sigma_J, double sigma_u) {
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
@@ -120,10 +118,11 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     std::vector<double> param2_values(num_param1 * num_param2);
     std::vector<double> gap_ratios_values(num_param1 * num_param2);
     std::vector<double> condensate_fraction_values(num_param1 * num_param2);
-    std::vector<double> coherence_values(num_param1 * num_param2);
-    Eigen::MatrixXcd eigenvectors;
+    std::vector<double> fluctuations_values(num_param1 * num_param2);
     Eigen::MatrixXd matrix_ratios(num_param1 * num_param2, nb_eigen -2);
     std::vector<Eigen::MatrixXd> spdm_matrices;
+    std::vector<double> diagonal_ratios;
+    std::vector<Eigen::VectorXcd> diagonal_eigenvalues;
 
     // Progress tracking
     std::atomic<int> progress_counter(0);
@@ -132,89 +131,115 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     // Threshold for the loop
     double variance_threshold_percent = 1e-8;
 
-    // Main loop for the calculations with parallelization
-    while (true) {
-        #pragma omp parallel for collapse(2) schedule(dynamic)
-        for (int i = 0; i < num_param1; ++i) {
-            for (int j = 0; j < num_param2; ++j) {
+    // Spacing parameters
+    const double log_param1_min = std::log10(param1_min);
+    const double log_param1_max = std::log10(param1_max);
+    const double log_param2_min = std::log10(param2_min);
+    const double log_param2_max = std::log10(param2_max);
+    const double log_param1_step = (log_param1_max - log_param1_min) / (num_param1 - 1);
+    const double log_param2_step = (log_param2_max - log_param2_min) / (num_param2 - 1);
 
-                // Parameters
-                double param1 = param1_min + i * param1_step;
-                double param2 = param2_min + j * param2_step;
+    // Main loop for the calculations with parallelization
+    #pragma omp parallel for collapse(2) schedule(dynamic)
+    for (int i = 0; i < num_param1; ++i) {
+        for (int j = 0; j < num_param2; ++j) {
+
+            const double param1 = std::pow(10.0, log_param1_min + i * log_param1_step);
+            const double param2 = std::pow(10.0, log_param2_min + j * log_param2_step);
 
                 // Hamiltonian
-                Eigen::SparseMatrix<double> H = H_fixed + H1 * param1 + H2 * param2;
-
+                Eigen::SparseMatrix<double> H;
+                if (sigma_J > 0.0 && sigma_u > 0.0) {
+                    H = H_fixed + BH::randomize_h(H1, param1, sigma_J) + BH::randomize_h(H2, param2, sigma_u);
+                }
+                else if (sigma_J > 0.0) {
+                    H = H_fixed + BH::randomize_h(H1, param1, sigma_J) + H2 * param2;
+                }
+                else if (sigma_u > 0.0) {
+                    H = H_fixed + H1 * param1 + BH::randomize_h(H2, param2, sigma_u);
+                }
+                else {
+                    H = H_fixed + H1 * param1 + H2 * param2;
+                }
+                
                 // Diagonalization
+                Eigen::MatrixXcd eigenvectors;
                 Eigen::VectorXcd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
+                Op::sort_eigen(eigenvalues, eigenvectors);
 
                 // Gap ratios
-                Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
-                double gap_ratio = vec_ratios.size() > 0 ? vec_ratios.sum() / vec_ratios.size() : 0.0;
+                const Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
+                const double gap_ratio = vec_ratios.size() > 0 ? vec_ratios.sum() / vec_ratios.size() : 0.0;
 
                 // SPDM
-                Eigen::MatrixXcd spdm;
-                spdm = SPDM(basis, tags, eigenvectors);
+                const Eigen::MatrixXcd spdm = SPDM(basis, tags, eigenvectors);
 
                 // Condensate fraction
-                Eigen::EigenSolver<Eigen::MatrixXd> solver(spdm.real());
-                double max_eigenval = solver.eigenvalues().real().maxCoeff();
-                double condensate_fraction = std::abs(max_eigenval / spdm.trace());
+                Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm);
+                const double lambda_0 = solver.eigenvalues().maxCoeff();
+                const double N = spdm.trace().real();
+                const double condensate_fraction = lambda_0 / N; 
 
-                // Coherence
-                double K;
-                K = coherence(spdm);
+                // Local fluctuation
+                const Eigen::VectorXcd phi0 = eigenvectors.col(0);
+                const double fluctuations = local_fluctu(phi0, basis);
 
-                int index = i * num_param1 + j;
+                const int index = i * num_param1 + j;
                 
                 param1_values[index] = param1;
                 param2_values[index] = param2;
                 gap_ratios_values[index] = gap_ratio;
                 condensate_fraction_values[index] = condensate_fraction;
-                coherence_values[index] = K;
+                fluctuations_values[index] = fluctuations;
                 matrix_ratios.row(index) = vec_ratios;
                 
                 #pragma omp critical
                 {
                     if(j == num_param2 - i - 1){
                         spdm_matrices.push_back(spdm.real());
+                        diagonal_eigenvalues.push_back(eigenvalues);
+                        const double ratio = param1 / param2;
+                        diagonal_ratios.push_back(ratio);
                     }
                 }
-                int local_count = progress_counter.fetch_add(1) + 1;
+                const int local_count = progress_counter.fetch_add(1) + 1;
                 if (local_count % 10 == 0 || local_count == total_iterations) {
-                    int percent = (local_count * 100) / total_iterations;
+                    const int percent = (local_count * 100) / total_iterations;
                     std::cout << "\r" << percent << "%" << std::flush;
                 }
-            }
         }
-
-        // Calculate the mean of the gap ratios
-        double mean_gap_ratio = std::accumulate(gap_ratios_values.begin(), gap_ratios_values.end(), 0.0) / gap_ratios_values.size();
-        
-        // Calculate the variance of the gap ratios
-        double variance_gap_ratio = 0.0;
-        for (const auto& value : gap_ratios_values) {
-            variance_gap_ratio += (value - mean_gap_ratio) * (value - mean_gap_ratio);
-        }
-        variance_gap_ratio /= gap_ratios_values.size();
-
-        // Continue in the loop if the variance is below the threshold
-        if (variance_gap_ratio > variance_threshold_percent * mean_gap_ratio) {
-            break;
-        }
-
-        // Increase the number of eigenvalues and resize the matrix
-        nb_eigen += 5;
-        matrix_ratios.resize(num_param1 * num_param2, nb_eigen - 2);  
     }
 
     // Save the results to a file
     for (int i = 0; i < num_param1 * num_param2; ++i) {
-        file << param1_values[i] << " " << param2_values[i] << " " << gap_ratios_values[i] << " " << condensate_fraction_values[i] << " " << coherence_values[i] << std::endl;
+        file << param1_values[i] << " " << param2_values[i] << " " << gap_ratios_values[i] << " " << condensate_fraction_values[i] << " " << fluctuations_values[i] << std::endl;
     }
     file.close();
+
+    // Save diagonal eigenvalues to file
+    std::ofstream eigen_file("eigenvalues_diagonal.txt");
+    std::string param1_name, param2_name;
+    if (fixed_param == "T") {
+        param1_name = "U";
+        param2_name = "mu";
+    } else if (fixed_param == "U") {
+        param1_name = "T";
+        param2_name = "mu";
+    } else {
+        param1_name = "T";
+        param2_name = "U";
+    }
+    eigen_file << "# Ratio " << param1_name << "/" << param2_name << " Eigenvalues" << std::endl;
+    for (size_t k = 0; k < diagonal_eigenvalues.size(); ++k) {
+        eigen_file << diagonal_ratios[k];
+        for (int e = 0; e < diagonal_eigenvalues[k].size(); ++e) {
+            eigen_file << " " << diagonal_eigenvalues[k][e].real();
+        }
+        eigen_file << std::endl;
+    }
+    eigen_file.close();
     
-    // // PCA, dispersion, and clustering initialization
+    // // PCA, dispersion
     // std::vector<Eigen::MatrixXd> pca_matrices;
     // std::vector<double> dispersions;
     // std::vector<Eigen::VectorXi> cluster_labels;
@@ -280,79 +305,99 @@ Eigen::VectorXd Analysis::gap_ratios(Eigen::VectorXcd eigenvalues,int nb_eigen) 
 
 /* Calculate the single-particle density matrix of the system */
 Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, Eigen::MatrixXcd& eigenvectors) {
-    
-    // Initialize the single-particle density matrix
     int m = basis.rows();
+    int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
 
-    // Calculate the braket for the ground state
-    Eigen::VectorXd phi0 = eigenvectors.col(0).real();
+    Eigen::VectorXcd phi0 = eigenvectors.col(0);
+
+    std::map<double, int> tag_index;
+    for (int k = 0; k < D; ++k) {
+        tag_index.emplace(tags[k], k);
+    }
+    static const std::vector<int> primes = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
+
     for (int i = 0; i < m; ++i) {
         for (int j = i; j < m; ++j) {
-            spdm(i, j) = braket(phi0, basis, tags, i, j);
-        }
-        for (int j = 0; j < i; ++j) {
-            spdm(i, j) = std::conj(spdm(j, i));
-        }
-    }
-    return spdm/ eigenvectors.cols();
-}
+            std::complex<double> sum = 0.0;
 
-/* Calculate the fluctuations of the system */
-double Analysis::coherence(const Eigen::MatrixXcd& spdm) {
-    double sum_all = 0;
-    double sum_diag = 0;
-
-    // Calculate the sum of the squares of the elements of the spdm
-    for (int i = 0; i < spdm.rows(); ++i) {
-        double diag_val = std::real(spdm(i, i) * std::conj(spdm(i, i)));
-        sum_diag += diag_val;
-        sum_all += diag_val;
-        for (int j = i + 1; j < spdm.cols(); ++j) {
-            sum_all += 2.0 * std::real(spdm(i, j) * std::conj(spdm(i, j)));
-        }
-    }
-    return (sum_all - sum_diag)/sum_all;
-}
-
-
-        /* BRAKET CALCULATIONS */
-
-/* Calculate the mean value of the operator <phi0|ai+ aj|phi0> */
-std::complex<double> Analysis::braket(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int i, int j) {
-    
-    // Initialization
-    std::complex<double> braket_value = 0 ;
-    static const std::vector<int> primes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97 };
-   
-   // Loop over the Fock states basis
-    for (int k = 0; k < basis.cols(); ++k) {
-
-        // If the coefficient of the decomposition of the state is different from zero
-        if (std::abs(phi0[k]) > std::numeric_limits<double>::epsilon()) {
-            Eigen::VectorXd state = basis.col(k);
-
-            // If the state has at least one boson at site j
-            if (state[i] >= 0 && state[j] >= 1) {
-                state[i] += 1;
-                state[j] -= 1;
-
-                // Calculate the tag of the new state after applying (ai+ aj)
-                double x = BH::calculate_tag(state, primes, i);
-
-                // Search the index of the new state in the basis
-                int index = BH::search_tag(tags, x);
-
-                // If the coefficient of the decomposition of the new state is different from zero
-                if (std::abs(phi0[index]) > std::numeric_limits<double>::epsilon()) {
-                    braket_value += std::conj(phi0[k]) * phi0[index] * sqrt(state[i] * state[j]);
+            if (i == j) {
+                for (int k = 0; k < D; ++k) {
+                    double ni = static_cast<double>(basis(i, k));
+                    double prob = std::norm(phi0[k]);
+                    sum += prob * ni;
+                }
+            } else {
+                for (int k = 0; k < D; ++k) {
+                    double ni = basis(i, k);
+                    double nj = basis(j, k);
+                    if (nj <= 0) continue;
+                    double factor = std::sqrt((ni + 1) * nj);
+                    Eigen::VectorXd state = basis.col(k);
+                    state(i) += 1;
+                    state(j) -= 1;
+                    double target_tag = BH::calculate_tag(state, primes);
+                    auto it = tag_index.find(target_tag);
+                    if (it != tag_index.end()) {
+                        int l = it->second;
+                        sum += std::conj(phi0[k]) * phi0[l] * factor;
+                    }
                 }
             }
+            spdm(i, j) = sum;
+            if (i != j) spdm(j, i) = std::conj(sum);
         }
     }
-    return braket_value;
+    return spdm;
 }
 
+/* Calculate the mean value of the operator <phi0|ai+ aj|phi0> */
+std::complex<double> Analysis::braket(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int i, int j){
+    std::complex<double> val = 0.0;
+    const int D = basis.cols();
+    if (i == j) {
+        for (int k = 0; k < D; ++k) {
+            double ni = static_cast<double>(basis(i, k));
+            double prob = std::norm(phi0[k]);
+            val += prob * ni;
+        }
+        return val;
+    }
+    static const std::vector<int> primes = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
+    for (int k = 0; k < D; ++k) {
+        double ni = basis(i, k);
+        double nj = basis(j, k);
+        if (nj < 1) continue;                     
+        double factor = std::sqrt((ni + 1) * nj);
+        Eigen::VectorXd state = basis.col(k);
+        state(i) += 1;
+        state(j) -= 1;
+        double new_tag = BH::calculate_tag(state, primes);
+        int idx = BH::search_tag(tags, new_tag);
+        if (idx >= 0) {
+            val += std::conj(phi0[k]) * phi0[idx] * factor;
+        }
+    }
+    return val;
+}
+
+double Analysis::local_fluctu(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
+    int m = basis.rows();
+    int D = basis.cols();
+    double sum = 0.0;
+    for (int i = 0; i < m; ++i) {
+        double mean_n = 0.0;
+        double mean_n2 = 0.0;
+        for (int k = 0; k < D; ++k) {
+            double prob = std::norm(phi0[k]);
+            double ni = basis(i, k);
+            mean_n += prob * ni;
+            mean_n2 += prob * ni * ni;
+        }
+        sum += mean_n2 - mean_n * mean_n;
+    }
+    return sum / m;
+}
 
                     ///// UTILITY FUNCTIONS /////
 

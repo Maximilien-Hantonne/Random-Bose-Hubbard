@@ -15,6 +15,25 @@ using namespace Spectra;
 
 ///// DIAGONALIZATION /////
 
+    /* SORT EIGENVALUES AND EIGENVECTORS IN DESCENDING ORDER */
+
+/* Sort eigenvalues and eigenvectors in ascending order by real part of eigenvalue */
+void Op::sort_eigen(Eigen::VectorXcd& eigenvalues, Eigen::MatrixXcd& eigenvectors) {
+    int n = eigenvalues.size();
+    std::vector<std::pair<double, int>> eigen_pairs;
+    for (int i = 0; i < n; ++i) {
+        eigen_pairs.push_back(std::make_pair(eigenvalues[i].real(), i));
+    }
+    std::sort(eigen_pairs.begin(), eigen_pairs.end());
+    Eigen::VectorXcd sorted_eigenvalues(n);
+    Eigen::MatrixXcd sorted_eigenvectors(eigenvectors.rows(), n);
+    for (int i = 0; i < n; ++i) {
+        sorted_eigenvalues[i] = eigenvalues[eigen_pairs[i].second];
+        sorted_eigenvectors.col(i) = eigenvectors.col(eigen_pairs[i].second);
+    }
+    eigenvalues = sorted_eigenvalues;
+    eigenvectors = sorted_eigenvectors;
+}
 
     /* IMPLICITLY RESTARTED LANCZOS METHOD (IRLM) */
 

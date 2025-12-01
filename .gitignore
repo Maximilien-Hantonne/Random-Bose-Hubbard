@@ -1,14 +1,14 @@
 #Ignore folders
 .cache/
 build/
+figures/
 
 #Ignore various files
 *.o
 *Zone.Identifier
 *.json
-
-# Ignore specific files
-phase.txt
+*.txt
+!CMakeLists.txt
 
 
 

@@ -17,12 +17,14 @@ void print_usage() {
               << "Options:\n"
               << "  -m, --sites       Number of sites\n"
               << "  -n, --bosons      Number of bosons\n"
-              << "  -J, --hopping     Hopping parameter\n"
+              << "  -T, --hopping     Hopping parameter\n"
               << "  -U, --interaction On-site interaction\n"
               << "  -u, --potential   Chemical potential\n"
-              << "  -r, --range     Range for varying parameters (if range is the same for each)\n"
-              << "  -s, --step      Step for varying parameters (with s < r)\n"
-              << "  -f --fixed      Fixed parameter (J, U or u) \n";
+              << "  -r, --range       Range for varying parameters (if range is the same for each)\n"
+              << "  -s, --step        Step for varying parameters (with s < r)\n"
+              << "  -f, --fixed       Fixed parameter (T, U or u)\n"
+              << "  -t, --sigma-t     Disorder variance for hopping (default: 0.0)\n"
+              << "  -v, --sigma-u     Disorder variance for chemical potential (default: 0.0)\n";
 }
 
 
@@ -30,19 +32,22 @@ int main(int argc, char *argv[]) {
 
     // PARAMETERS OF THE MODEL
     int m, n;
-    double J, U, mu, s, r;
+    double T, U, mu, s, r;
+    double sigma_t = 0.0, sigma_u = 0.0;
     std::string fixed_param;
 
-    const char* const short_opts = "m:n:J:U:u:r:s:f:h";
+    const char* const short_opts = "m:n:T:U:u:r:s:f:t:v:h";
     const option long_opts[] = {
         {"sites", required_argument, nullptr, 'm'},
         {"bosons", required_argument, nullptr, 'n'},
-        {"hopping", required_argument, nullptr, 'J'},
+        {"hopping", required_argument, nullptr, 'T'},
         {"interaction", required_argument, nullptr, 'U'},
         {"potential", required_argument, nullptr, 'u'},
         {"range", required_argument, nullptr, 'r'},
         {"step", required_argument, nullptr, 's'},
         {"fixed", required_argument, nullptr, 'f'},
+        {"sigma-t", required_argument, nullptr, 't'},
+        {"sigma-u", required_argument, nullptr, 'v'},
 		{"help", no_argument, nullptr, 'h'},
         {nullptr, no_argument, nullptr, 0}
     };
@@ -57,8 +62,8 @@ int main(int argc, char *argv[]) {
             case 'n':
                 n = std::stoi(optarg);
                 break;
-            case 'J':
-                J = std::stod(optarg);
+            case 'T':
+                T = std::stod(optarg);
                 break;
             case 'U':
                 U = std::stod(optarg);
@@ -75,6 +80,12 @@ int main(int argc, char *argv[]) {
             case 'f':
                 fixed_param = optarg;
                 break;
+            case 't':
+                sigma_t = std::stod(optarg);
+                break;
+            case 'v':
+                sigma_u = std::stod(optarg);
+                break;
             case 'h':
             default:
                 print_usage();
@@ -86,13 +97,13 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: s must be smaller than r." << std::endl;
         return 1;
     }
-    if(fixed_param != "J" && fixed_param != "U" && fixed_param != "u"){
-        std::cerr << "Error: fixed parameter must be J, U or u." << std::endl;
+    if(fixed_param != "T" && fixed_param != "U" && fixed_param != "u"){
+        std::cerr << "Error: fixed parameter must be T, U or u." << std::endl;
         return 1;
     }
 
     // Calculate the exact parameters
-    Analysis::exact_parameters(m, n, J, U, mu, s, r, fixed_param);
+    Analysis::exact_parameters(m, n, T, U, mu, s, r, fixed_param, sigma_t, sigma_u);
 
     // Execute the Python script to plot the results
     auto run_python_script = []() -> int {

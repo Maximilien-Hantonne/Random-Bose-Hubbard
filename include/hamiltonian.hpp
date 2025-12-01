@@ -31,6 +31,8 @@ namespace BH
 
     /* calculate the unique tag of the kth column of the matrix */
     double calculate_tag(const Eigen::MatrixXd& basis, const std::vector<int>& primes, int k);
+    /* calculate the unique tag of a state */
+    double calculate_tag(const Eigen::VectorXd& state, const std::vector<int>& primes);
 
     /* calculate and store the tags of each state of the Hilbert space basis */
     Eigen::VectorXd calculate_tags(const Eigen::MatrixXd& basis, const std::vector<int>& primes);
@@ -44,7 +46,7 @@ namespace BH
 // FILL THE HAMILTONIAN OF THE SYSTEM
 
     /* fill the hopping term of the Hamiltonian */
-    static void fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double J);
+    static void fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double T);
 
     /* fill the interaction term of the Hamiltonian */
     static void fill_interaction(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>& hmatrix, double U); 
@@ -59,8 +61,13 @@ namespace BH
     
 // HAMILTONIAN MATRICES
 
-    Eigen::SparseMatrix<double> fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double J, double U, double mu);
-    Eigen::SparseMatrix<double> max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double J, double U, double mu);
+    Eigen::SparseMatrix<double> fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double T, double U, double mu);
+    Eigen::SparseMatrix<double> max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double T, double U, double mu);
+
+// RANDOMIZE HAMILTONIAN
+
+    /* Randomize a Hamiltonian matrix around a value with gaussian variance */
+    Eigen::SparseMatrix<double> randomize_h(Eigen::SparseMatrix<double>& H, double param, double sigma);
 
 } 
 
