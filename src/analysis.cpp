@@ -143,7 +143,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     const double log_param2_step = (log_param2_max - log_param2_min) / (num_param2 - 1);
 
     // Main loop for the calculations with parallelization
-    #pragma omp parallel for collapse(2) schedule(dynamic)
+    #pragma omp parallel for collapse(2) schedule(static)
     for (int i = 0; i < num_param1; ++i) {
         for (int j = 0; j < num_param2; ++j) {
 
@@ -304,7 +304,6 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
 
-    // Use unordered_map for O(1) lookups instead of O(log n)
     std::unordered_map<double, int> tag_index;
     tag_index.reserve(D);
     for (int k = 0; k < D; ++k) {
@@ -316,7 +315,6 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     for (int i = 0; i < m; ++i) {
         for (int j = i; j < m; ++j) {
             std::complex<double> sum = 0.0;
-
             if (i == j) {
                 for (int k = 0; k < D; ++k) {
                     const double ni = basis(i, k);
