@@ -1,4 +1,5 @@
 #include <cmath>
+#include <numeric>
 #include <stdexcept>
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -19,20 +20,17 @@ using namespace Spectra;
 
 /* Sort eigenvalues and eigenvectors in ascending order by real part of eigenvalue */
 void Op::sort_eigen(Eigen::VectorXcd& eigenvalues, Eigen::MatrixXcd& eigenvectors) {
-    int n = eigenvalues.size();
-    std::vector<std::pair<double, int>> eigen_pairs;
+    const int n = eigenvalues.size();
+    std::vector<int> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+    std::sort(indices.begin(), indices.end(), 
+              [&eigenvalues](int i, int j) { return eigenvalues[i].real() < eigenvalues[j].real(); });
+    Eigen::VectorXcd temp_eigenvalues = eigenvalues;
+    Eigen::MatrixXcd temp_eigenvectors = eigenvectors;
     for (int i = 0; i < n; ++i) {
-        eigen_pairs.push_back(std::make_pair(eigenvalues[i].real(), i));
+        eigenvalues[i] = temp_eigenvalues[indices[i]];
+        eigenvectors.col(i) = temp_eigenvectors.col(indices[i]);
     }
-    std::sort(eigen_pairs.begin(), eigen_pairs.end());
-    Eigen::VectorXcd sorted_eigenvalues(n);
-    Eigen::MatrixXcd sorted_eigenvectors(eigenvectors.rows(), n);
-    for (int i = 0; i < n; ++i) {
-        sorted_eigenvalues[i] = eigenvalues[eigen_pairs[i].second];
-        sorted_eigenvectors.col(i) = eigenvectors.col(eigen_pairs[i].second);
-    }
-    eigenvalues = sorted_eigenvalues;
-    eigenvectors = sorted_eigenvectors;
 }
 
     /* IMPLICITLY RESTARTED LANCZOS METHOD (IRLM) */

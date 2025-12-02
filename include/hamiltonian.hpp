@@ -66,8 +66,10 @@ namespace BH
 
 // RANDOMIZE HAMILTONIAN
 
-    /* Randomize a Hamiltonian matrix around a value with gaussian variance */
-    Eigen::SparseMatrix<double> randomize_h(Eigen::SparseMatrix<double>& H, double param, double sigma);
+    /* Random Hamiltonian */
+    Eigen::SparseMatrix<double> random_hamiltonian(const Eigen::SparseMatrix<double>& TH, const double T, const double sigma_T,
+                                        const Eigen::SparseMatrix<double>& UH, const double U, const double sigma_U,
+                                        const Eigen::SparseMatrix<double>& uH, const double u, const double sigma_u);
 
 } 
 

@@ -1,8 +1,8 @@
 #include<vector>
 #include<iostream>
 #include<random>
-#include<map>
 #include<utility>
+#include<unordered_map>
 #include<Eigen/Dense>
 #include<Eigen/SparseCore>
 
@@ -291,31 +291,97 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
 
     /* RANDOMIZE HAMILTONIAN */
 
-/* Randomize a Hamiltonian matrix around a value with gaussian distribution of given variance */
-Eigen::SparseMatrix<double> BH::randomize_h(Eigen::SparseMatrix<double>& H, double param, double sigma) {
-    if (sigma <= 0.0) {
-        H = H * param;
-        return H;
+Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& TH, const double T, const double sigma_T,
+                                                      const Eigen::SparseMatrix<double>& UH, const double U, const double sigma_U,
+                                                      const Eigen::SparseMatrix<double>& uH, const double u, const double sigma_u) {
+    // Determine matrix size
+    const int n = TH.rows();
+    
+    // Build the result using triplets for efficiency
+    std::vector<Eigen::Triplet<double>> triplets;
+    triplets.reserve(TH.nonZeros() + UH.nonZeros() + uH.nonZeros());
+    
+    // Check if randomization is needed
+    const bool has_T_disorder = (sigma_T > 0.0);
+    const bool has_U_disorder = (sigma_U > 0.0);
+    const bool has_u_disorder = (sigma_u > 0.0);
+    
+    // Random number generator (only if needed)
+    std::mt19937 gen;
+    if (has_T_disorder || has_U_disorder || has_u_disorder) {
+        std::random_device rd;
+        gen.seed(rd());
     }
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::normal_distribution<double> dist(param, sigma);
     
-    std::map<std::pair<int, int>, double> random_coeffs;
-    
-    for (int k = 0; k < H.outerSize(); ++k) {
-        for (Eigen::SparseMatrix<double>::InnerIterator it(H, k); it; ++it) {
-            int row = it.row();
-            int col = it.col();
-            double random_coeff;
-            if (row <= col) {
-                random_coeff = dist(gen);
-                random_coeffs[{row, col}] = random_coeff;
-            } else {
-                random_coeff = random_coeffs[{col, row}];
+    // Process TH (off-diagonal hopping terms) - symmetric randomization
+    if (has_T_disorder) {
+        std::normal_distribution<double> dist_T(T, sigma_T);
+        // Map to store randomized coefficients for symmetric pairs
+        std::unordered_map<int64_t, double> coeff_map;
+        coeff_map.reserve(TH.nonZeros() / 2);  // Reserve space for upper triangle
+        
+        for (int k = 0; k < TH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(TH, k); it; ++it) {
+                const int row = it.row();
+                const int col = it.col();
+                
+                // Use upper triangle to generate coefficient
+                const int r = std::min(row, col);
+                const int c = std::max(row, col);
+                const int64_t key = (static_cast<int64_t>(r) << 32) | c;
+                
+                const auto found = coeff_map.find(key);
+                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = dist_T(gen));
+                
+                triplets.emplace_back(row, col, coeff * it.value());
             }
-            it.valueRef() *= random_coeff;
+        }
+    } else {
+        // No disorder - just scale by T
+        for (int k = 0; k < TH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(TH, k); it; ++it) {
+                triplets.emplace_back(it.row(), it.col(), T * it.value());
+            }
         }
     }
+    
+    // Process UH (diagonal interaction terms) - independent randomization
+    if (has_U_disorder) {
+        std::normal_distribution<double> dist_U(U, sigma_U);
+        for (int k = 0; k < UH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(UH, k); it; ++it) {
+                const double coeff = dist_U(gen);
+                triplets.emplace_back(it.row(), it.col(), coeff * it.value());
+            }
+        }
+    } else {
+        for (int k = 0; k < UH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(UH, k); it; ++it) {
+                triplets.emplace_back(it.row(), it.col(), U * it.value());
+            }
+        }
+    }
+    
+    // Process uH (diagonal chemical potential terms) - independent randomization
+    if (has_u_disorder) {
+        std::normal_distribution<double> dist_u(u, sigma_u);
+        for (int k = 0; k < uH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(uH, k); it; ++it) {
+                const double coeff = dist_u(gen);
+                triplets.emplace_back(it.row(), it.col(), coeff * it.value());
+            }
+        }
+    } else {
+        for (int k = 0; k < uH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(uH, k); it; ++it) {
+                triplets.emplace_back(it.row(), it.col(), u * it.value());
+            }
+        }
+    }
+    
+    // Build the final sparse matrix from triplets
+    Eigen::SparseMatrix<double> H(n, n);
+    H.setFromTriplets(triplets.begin(), triplets.end());
+    
     return H;
 }

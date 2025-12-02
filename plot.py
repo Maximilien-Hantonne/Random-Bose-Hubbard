@@ -106,10 +106,10 @@ x_unique = np.unique(x_values)
 y_unique = np.unique(y_values)
 x_grid, y_grid = np.meshgrid(x_unique, y_unique)
 
-# Reshape data to grid
-gap_ratio_grid = gap_ratio.reshape(len(y_unique), len(x_unique))
-condensate_fraction_grid = condensate_fraction.reshape(len(y_unique), len(x_unique))
-fluctuations_grid = fluctuations.reshape(len(y_unique), len(x_unique))
+# Reshape data to grid (data is stored with param1 outer loop, param2 inner loop)
+gap_ratio_grid = gap_ratio.reshape(len(x_unique), len(y_unique)).T
+condensate_fraction_grid = condensate_fraction.reshape(len(x_unique), len(y_unique)).T
+fluctuations_grid = fluctuations.reshape(len(x_unique), len(y_unique)).T
 
 # Apply smoothing
 sigma = 2

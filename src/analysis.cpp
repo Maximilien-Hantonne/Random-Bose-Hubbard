@@ -14,6 +14,7 @@
 #include <Spectra/MatOp/DenseSymMatProd.h>
 
 #include "Eigen/src/Core/Matrix.h"
+#include "Eigen/src/SparseCore/SparseMatrix.h"
 #include "operator.hpp"
 #include "analysis.hpp"
 #include "hamiltonian.hpp"
@@ -41,7 +42,7 @@
  */
 
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double sigma_u) {
+void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double sigma_U, double sigma_u) {
     
     // Prerequisites
     if (std::abs(T-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
@@ -78,18 +79,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     double T_min = T, T_max = T + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
 
     // Calculate the exact parameters
-    if (fixed_param == "T") {
-        TH = TH * T;
-        calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_u);
-    }
-    else if (fixed_param == "U") {
-        UH = UH * U;
-        calculate_and_save(basis, tags, UH, TH, uH, fixed_param, U, T_min, T_max, mu_min, mu_max, s, s, sigma_t, sigma_u);
-    }
-    else{
-        uH = uH * mu;
-        calculate_and_save(basis, tags, uH, TH, UH, fixed_param, mu, T_min, T_max, U_min, U_max, s, s, sigma_t, sigma_u);
-    }
+    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_U, sigma_u);
 
     // End of the calculations
     std::cout << " - ";
@@ -101,19 +91,35 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, Eigen::SparseMatrix<double> H_fixed, Eigen::SparseMatrix<double> H1, Eigen::SparseMatrix<double> H2, std::string fixed_param, double fixed_value, double param1_min, double param1_max, double param2_min, double param2_max, double param1_step, double param2_step, double sigma_J, double sigma_u) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T, const double sigma_U, const double sigma_u) {
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
     file << fixed_param << " ";
-    file << fixed_value << std::endl;
+    if (fixed_param == "T") {
+        file << T << std::endl;
+    } else if (fixed_param == "U") {
+        file << U << std::endl;
+    } else {
+        file << mu << std::endl;
+    }
     
     // Parameters for the calculations
-    int nb_eigen = 20;
+    const int nb_eigen = 20;
 
+    // Hoist fixed_param comparisons to avoid string comparison in loop
+    const bool is_T_fixed = (fixed_param == "T");
+    const bool is_U_fixed = (fixed_param == "U");
+
+    // Varying parameters
+    const double param1_min = is_T_fixed ? U_min : (is_U_fixed ? T_min : T_min);
+    const double param1_max = is_T_fixed ? U_max : (is_U_fixed ? T_max : T_max);
+    const double param2_min = is_T_fixed ? mu_min : (is_U_fixed ? mu_min : U_min);
+    const double param2_max = is_T_fixed ? mu_max : (is_U_fixed ? mu_max : U_max);
+    
     // Matrices initialization
-    int num_param1 = static_cast<int>((param1_max - param1_min) / param1_step) + 1;
-    int num_param2 = static_cast<int>((param2_max - param2_min) / param2_step) + 1;
+    const int num_param1 = static_cast<int>((param1_max - param1_min) / param1_step) + 1;
+    const int num_param2 = static_cast<int>((param2_max - param2_min) / param2_step) + 1;
     std::vector<double> param1_values(num_param1 * num_param2);
     std::vector<double> param2_values(num_param1 * num_param2);
     std::vector<double> gap_ratios_values(num_param1 * num_param2);
@@ -126,10 +132,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
 
     // Progress tracking
     std::atomic<int> progress_counter(0);
-    int total_iterations = num_param1 * num_param2;
-
-    // Threshold for the loop
-    double variance_threshold_percent = 1e-8;
+    const int total_iterations = num_param1 * num_param2;
 
     // Spacing parameters
     const double log_param1_min = std::log10(param1_min);
@@ -146,67 +149,59 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
 
             const double param1 = std::pow(10.0, log_param1_min + i * log_param1_step);
             const double param2 = std::pow(10.0, log_param2_min + j * log_param2_step);
+            
+            const double T_val = is_T_fixed ? T : param1;
+            const double U_val = is_U_fixed ? U : (is_T_fixed ? param1 : param2);
+            const double mu_val = is_T_fixed ? param2 : (is_U_fixed ? param2 : mu);
 
-                // Hamiltonian
-                Eigen::SparseMatrix<double> H;
-                if (sigma_J > 0.0 && sigma_u > 0.0) {
-                    H = H_fixed + BH::randomize_h(H1, param1, sigma_J) + BH::randomize_h(H2, param2, sigma_u);
-                }
-                else if (sigma_J > 0.0) {
-                    H = H_fixed + BH::randomize_h(H1, param1, sigma_J) + H2 * param2;
-                }
-                else if (sigma_u > 0.0) {
-                    H = H_fixed + H1 * param1 + BH::randomize_h(H2, param2, sigma_u);
-                }
-                else {
-                    H = H_fixed + H1 * param1 + H2 * param2;
-                }
+            const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(TH, T_val, sigma_T, UH, U_val, sigma_U, uH, mu_val, sigma_u);
+
+            // Diagonalization
+            Eigen::MatrixXcd eigenvectors;
+            Eigen::VectorXcd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
+            Op::sort_eigen(eigenvalues, eigenvectors);
+
+            // Gap ratios
+            const Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
+            const double gap_ratio = vec_ratios.sum() / vec_ratios.size();
+
+            // Extract ground state once for both SPDM and fluctuations
+            const Eigen::VectorXcd& phi0 = eigenvectors.col(0);
+
+            // SPDM
+            const Eigen::MatrixXcd spdm = SPDM(basis, tags, phi0);
+
+            // Condensate fraction
+            const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm);
+            const double lambda_0 = solver.eigenvalues().maxCoeff();
+            const double N = spdm.trace().real();
+            const double condensate_fraction = lambda_0 / N; 
+
+            // Local fluctuation
+            const double fluctuations = local_fluctu(phi0, basis);
+
+            const int index = i * num_param2 + j;
                 
-                // Diagonalization
-                Eigen::MatrixXcd eigenvectors;
-                Eigen::VectorXcd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
-                Op::sort_eigen(eigenvalues, eigenvectors);
-
-                // Gap ratios
-                const Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
-                const double gap_ratio = vec_ratios.size() > 0 ? vec_ratios.sum() / vec_ratios.size() : 0.0;
-
-                // SPDM
-                const Eigen::MatrixXcd spdm = SPDM(basis, tags, eigenvectors);
-
-                // Condensate fraction
-                Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm);
-                const double lambda_0 = solver.eigenvalues().maxCoeff();
-                const double N = spdm.trace().real();
-                const double condensate_fraction = lambda_0 / N; 
-
-                // Local fluctuation
-                const Eigen::VectorXcd phi0 = eigenvectors.col(0);
-                const double fluctuations = local_fluctu(phi0, basis);
-
-                const int index = i * num_param1 + j;
+            param1_values[index] = param1;
+            param2_values[index] = param2;
+            gap_ratios_values[index] = gap_ratio;
+            condensate_fraction_values[index] = condensate_fraction;
+            fluctuations_values[index] = fluctuations;
+            matrix_ratios.row(index) = vec_ratios;
                 
-                param1_values[index] = param1;
-                param2_values[index] = param2;
-                gap_ratios_values[index] = gap_ratio;
-                condensate_fraction_values[index] = condensate_fraction;
-                fluctuations_values[index] = fluctuations;
-                matrix_ratios.row(index) = vec_ratios;
-                
-                #pragma omp critical
-                {
-                    if(j == num_param2 - i - 1){
-                        spdm_matrices.push_back(spdm.real());
-                        diagonal_eigenvalues.push_back(eigenvalues);
-                        const double ratio = param1 / param2;
-                        diagonal_ratios.push_back(ratio);
-                    }
+            #pragma omp critical
+            {
+                if(j == num_param2 - i - 1){
+                    spdm_matrices.push_back(spdm.real());
+                    diagonal_eigenvalues.push_back(eigenvalues);
+                    diagonal_ratios.push_back(param1 / param2);
                 }
-                const int local_count = progress_counter.fetch_add(1) + 1;
-                if (local_count % 10 == 0 || local_count == total_iterations) {
-                    const int percent = (local_count * 100) / total_iterations;
-                    std::cout << "\r" << percent << "%" << std::flush;
-                }
+            }
+            const int local_count = progress_counter.fetch_add(1) + 1;
+            if (local_count % 10 == 0 || local_count == total_iterations) {
+                const int percent = (local_count * 100) / total_iterations;
+                std::cout << "\r" << percent << "%" << std::flush;
+            }
         }
     }
 
@@ -242,9 +237,8 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     // // PCA, dispersion
     // std::vector<Eigen::MatrixXd> pca_matrices;
     // std::vector<double> dispersions;
-    // std::vector<Eigen::VectorXi> cluster_labels;
 
-    // // Main loop for the PCA, dispersion, and clustering
+    // // Main loop for the PCA and dispersion
     // int num_rows = 3;
     // for (int i = 0; i < param1_max; ++i) {
 
@@ -270,31 +264,32 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     // save_matrices_to_csv("spdm_matrices.csv", spdm_matrices, "Matrix");
     // save_matrices_to_csv("pca_results.csv", pca_matrices, "PCA");
     // save_dispersions("dispersions.csv", dispersions);
-    // save_cluster_labels("cluster_labels.csv", cluster_labels);
 }
 
 
         /* GAP RATIOS */
 
 /* Calculate the energy gap ratios of the system */
-Eigen::VectorXd Analysis::gap_ratios(Eigen::VectorXcd eigenvalues,int nb_eigen) {
+Eigen::VectorXd Analysis::gap_ratios(const Eigen::VectorXcd& eigenvalues, int nb_eigen) {
     Eigen::VectorXd gap_ratios(nb_eigen - 2);
 
     // Sort the eigenvalues by their real part
     std::vector<double> sorted_eigenvalues(nb_eigen);
     for (int i = 0; i < nb_eigen; ++i) {
-        sorted_eigenvalues[i] = std::real(eigenvalues[i]);
+        sorted_eigenvalues[i] = eigenvalues[i].real();
     }
     std::sort(sorted_eigenvalues.begin(), sorted_eigenvalues.end());
 
     // Calculate the gap ratios
     for (int i = 1; i < nb_eigen - 1; ++i) {
-        double E_prev = sorted_eigenvalues[i - 1];
-        double E_curr = sorted_eigenvalues[i];
-        double E_next = sorted_eigenvalues[i + 1];
-        double min_gap = std::min(E_next - E_curr, E_curr - E_prev);
-        double max_gap = std::max(E_next - E_curr, E_curr - E_prev);
-        gap_ratios[i - 1] = (max_gap != 0) ? (min_gap / max_gap) : 0;
+        const double E_prev = sorted_eigenvalues[i - 1];
+        const double E_curr = sorted_eigenvalues[i];
+        const double E_next = sorted_eigenvalues[i + 1];
+        const double gap1 = E_next - E_curr;
+        const double gap2 = E_curr - E_prev;
+        const double min_gap = std::min(gap1, gap2);
+        const double max_gap = std::max(gap1, gap2);
+        gap_ratios[i - 1] = (max_gap != 0.0) ? (min_gap / max_gap) : 0.0;
         }
 
     return gap_ratios;
@@ -304,18 +299,19 @@ Eigen::VectorXd Analysis::gap_ratios(Eigen::VectorXcd eigenvalues,int nb_eigen) 
         /* SPDM FUNCTIONS */
 
 /* Calculate the single-particle density matrix of the system */
-Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, Eigen::MatrixXcd& eigenvectors) {
-    int m = basis.rows();
-    int D = basis.cols();
+Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::VectorXcd& phi0) {
+    const int m = basis.rows();
+    const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
 
-    Eigen::VectorXcd phi0 = eigenvectors.col(0);
-
-    std::map<double, int> tag_index;
+    // Use unordered_map for O(1) lookups instead of O(log n)
+    std::unordered_map<double, int> tag_index;
+    tag_index.reserve(D);
     for (int k = 0; k < D; ++k) {
         tag_index.emplace(tags[k], k);
     }
-    static const std::vector<int> primes = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
+    static constexpr int primes[] = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
+    static const std::vector<int> primes_vec(std::begin(primes), std::end(primes));
 
     for (int i = 0; i < m; ++i) {
         for (int j = i; j < m; ++j) {
@@ -323,23 +319,23 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
 
             if (i == j) {
                 for (int k = 0; k < D; ++k) {
-                    double ni = static_cast<double>(basis(i, k));
-                    double prob = std::norm(phi0[k]);
+                    const double ni = basis(i, k);
+                    const double prob = std::norm(phi0[k]);
                     sum += prob * ni;
                 }
             } else {
                 for (int k = 0; k < D; ++k) {
-                    double ni = basis(i, k);
-                    double nj = basis(j, k);
-                    if (nj <= 0) continue;
-                    double factor = std::sqrt((ni + 1) * nj);
+                    const double ni = basis(i, k);
+                    const double nj = basis(j, k);
+                    if (nj <= 0.0) continue;
+                    const double factor = std::sqrt((ni + 1.0) * nj);
                     Eigen::VectorXd state = basis.col(k);
-                    state(i) += 1;
-                    state(j) -= 1;
-                    double target_tag = BH::calculate_tag(state, primes);
-                    auto it = tag_index.find(target_tag);
+                    state(i) += 1.0;
+                    state(j) -= 1.0;
+                    const double target_tag = BH::calculate_tag(state, primes_vec);
+                    const auto it = tag_index.find(target_tag);
                     if (it != tag_index.end()) {
-                        int l = it->second;
+                        const int l = it->second;
                         sum += std::conj(phi0[k]) * phi0[l] * factor;
                     }
                 }
@@ -382,15 +378,15 @@ std::complex<double> Analysis::braket(const Eigen::VectorXcd& phi0, const Eigen:
 }
 
 double Analysis::local_fluctu(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
-    int m = basis.rows();
-    int D = basis.cols();
+    const int m = basis.rows();
+    const int D = basis.cols();
     double sum = 0.0;
     for (int i = 0; i < m; ++i) {
         double mean_n = 0.0;
         double mean_n2 = 0.0;
         for (int k = 0; k < D; ++k) {
-            double prob = std::norm(phi0[k]);
-            double ni = basis(i, k);
+            const double prob = std::norm(phi0[k]);
+            const double ni = basis(i, k);
             mean_n += prob * ni;
             mean_n2 += prob * ni * ni;
         }
