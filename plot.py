@@ -94,6 +94,7 @@ y_values = data[:, 1]
 gap_ratio = data[:, 2]
 condensate_fraction = data[:, 3]
 fluctuations = data[:, 4]
+qEA = data[:, 5]
 
 # Calculate parameter ranges
 param1_min = np.min(x_values)
@@ -110,12 +111,14 @@ x_grid, y_grid = np.meshgrid(x_unique, y_unique)
 gap_ratio_grid = gap_ratio.reshape(len(x_unique), len(y_unique)).T
 condensate_fraction_grid = condensate_fraction.reshape(len(x_unique), len(y_unique)).T
 fluctuations_grid = fluctuations.reshape(len(x_unique), len(y_unique)).T
+qEA_grid = qEA.reshape(len(x_unique), len(y_unique)).T
 
 # Apply smoothing
 sigma = 2
 gap_ratio_blurred = gaussian_filter(gap_ratio_grid, sigma=sigma)
 condensate_fraction_blurred = gaussian_filter(condensate_fraction_grid, sigma=sigma)
 fluctuations_blurred = gaussian_filter(fluctuations_grid, sigma=sigma)
+qEA_blurred = gaussian_filter(qEA_grid, sigma=sigma)
 
 # Create output directory
 output_dir = f'figures/{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}'
@@ -132,5 +135,7 @@ plot_phase_map(x_grid, y_grid, condensate_fraction_blurred, 'Condensate Fraction
                'condensate_fraction_plot.svg', f'Condensate fraction with respect to {x_label} and {y_label}')
 
 plot_phase_map(x_grid, y_grid, fluctuations_blurred, 'Fluctuations in Boson Number', x_label, y_label, output_dir,
-               'coherence_plot.svg', f'Fluctuations with respect to {x_label} and {y_label}')
+               'fluctuations_plot.svg', f'Fluctuations with respect to {x_label} and {y_label}')
 
+plot_phase_map(x_grid, y_grid, qEA_blurred, 'Edwards-Anderson Order Parameter ($q_{EA}$)', x_label, y_label, output_dir,
+               'qEA_plot.svg', f'Edwards-Anderson Parameter with respect to {x_label} and {y_label}')

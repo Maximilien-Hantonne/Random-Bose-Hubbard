@@ -220,7 +220,6 @@ void BH::fill_chemical(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>
 			tripletList.push_back(Eigen::Triplet<double>(it.row(), it.col(), it.value()));
 		}
 	}
-    std::vector<Eigen::Triplet<double>> tripletList2;
 	for (int k = 0; k < basis.cols(); k++) {
 		double value = 0;
 		for (int i = 0; i < basis.rows(); i++) {
@@ -293,7 +292,8 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
 
 Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& TH, const double T, const double sigma_T,
                                                       const Eigen::SparseMatrix<double>& UH, const double U, const double sigma_U,
-                                                      const Eigen::SparseMatrix<double>& uH, const double u, const double sigma_u) {
+                                                      const Eigen::SparseMatrix<double>& uH, const double u, const double sigma_u,
+                                                      const unsigned int seed) {
     const int n = TH.rows();
     std::vector<Eigen::Triplet<double>> triplets;
     triplets.reserve(TH.nonZeros() + UH.nonZeros() + uH.nonZeros());
@@ -301,15 +301,12 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
     const bool has_T_disorder = (sigma_T > 0.0);
     const bool has_U_disorder = (sigma_U > 0.0);
     const bool has_u_disorder = (sigma_u > 0.0);
-    std::mt19937 gen;
-    if (has_T_disorder || has_U_disorder || has_u_disorder) {
-        std::random_device rd;
-        gen.seed(rd());
-    }
+    std::mt19937 gen(seed);
     
-    // Hopping part randomization
+    // Hopping term
     if (has_T_disorder) {
-        std::normal_distribution<double> dist_T(T, sigma_T * std::max(T, 1.0));
+        const double stddev_T = (T != 0.0) ? sigma_T * std::abs(T) : sigma_T;
+        std::normal_distribution<double> dist_T(T, stddev_T);
         std::unordered_map<int64_t, double> coeff_map;
         coeff_map.reserve(TH.nonZeros() / 2); 
         
@@ -332,9 +329,11 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
             }
         }
     }
-    // Interaction part randomization
+    
+    // Interaction term
     if (has_U_disorder) {
-        std::normal_distribution<double> dist_U(U, sigma_U * std::max(U, 1.0));
+        const double stddev_U = (U != 0.0) ? sigma_U * std::abs(U) : sigma_U;
+        std::normal_distribution<double> dist_U(U, stddev_U);
         for (int k = 0; k < UH.outerSize(); ++k) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(UH, k); it; ++it) {
                 const double coeff = dist_U(gen);
@@ -348,9 +347,11 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
             }
         }
     }
-    // Potential part randomization
+    
+    // Potential term
     if (has_u_disorder) {
-        std::normal_distribution<double> dist_u(u, sigma_u * std::max(u,1.0));
+        const double stddev_u = (u != 0.0) ? sigma_u * std::abs(u) : sigma_u;
+        std::normal_distribution<double> dist_u(u, stddev_u);
         for (int k = 0; k < uH.outerSize(); ++k) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(uH, k); it; ++it) {
                 const double coeff = dist_u(gen);
@@ -364,6 +365,7 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
             }
         }
     }
+    
     Eigen::SparseMatrix<double> H(n, n);
     H.setFromTriplets(triplets.begin(), triplets.end());
     return H;

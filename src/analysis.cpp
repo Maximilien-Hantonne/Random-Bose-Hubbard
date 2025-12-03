@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iostream>
 #include <algorithm>
+#include <thread>
 
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -24,25 +25,8 @@
 
         /* MAIN FUNCTIONS */
 
-/**
- * @brief Main function for exact calculations parameters.
- *
- * This function performs exact calculations for the Bose-Hubbard model parameters.
- * It sets up the lattice geometry, constructs the Hamiltonian matrices, and calculates
- * various physical quantities over a range of parameters. The results are saved to files.
- *
- * @param m The number of lattice sites.
- * @param n The number of bosons.
- * @param T The hopping parameter.
- * @param U The on-site interaction parameter.
- * @param mu The chemical potential.
- * @param s The step size for the parameter sweep.
- * @param r The range for the parameter sweep.
- * @param fixed_param The parameter to be fixed during the calculations ("T", "U", or "mu").
- */
-
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double sigma_U, double sigma_u) {
+void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double sigma_U, double sigma_u, int realizations) {
     
     // Prerequisites
     if (std::abs(T-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
@@ -79,7 +63,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     double T_min = T, T_max = T + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
 
     // Calculate the exact parameters
-    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_U, sigma_u);
+    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_U, sigma_u, realizations);
 
     // End of the calculations
     std::cout << " - ";
@@ -91,7 +75,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T, const double sigma_U, const double sigma_u) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T, const double sigma_U, const double sigma_u, const int realizations) {
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
@@ -120,19 +104,21 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     // Matrices initialization
     const int num_param1 = static_cast<int>((param1_max - param1_min) / param1_step) + 1;
     const int num_param2 = static_cast<int>((param2_max - param2_min) / param2_step) + 1;
-    std::vector<double> param1_values(num_param1 * num_param2);
-    std::vector<double> param2_values(num_param1 * num_param2);
-    std::vector<double> gap_ratios_values(num_param1 * num_param2);
-    std::vector<double> condensate_fraction_values(num_param1 * num_param2);
-    std::vector<double> fluctuations_values(num_param1 * num_param2);
-    Eigen::MatrixXd matrix_ratios(num_param1 * num_param2, nb_eigen -2);
-    std::vector<Eigen::MatrixXd> spdm_matrices;
-    std::vector<double> diagonal_ratios;
-    std::vector<Eigen::VectorXcd> diagonal_eigenvalues;
+    const int total_size = num_param1 * num_param2;
+    std::vector<double> param1_values(total_size);
+    std::vector<double> param2_values(total_size);
+    std::vector<double> gap_ratios_values(total_size);
+    std::vector<double> condensate_fraction_values(total_size);
+    std::vector<double> fluctuations_values(total_size);
+    std::vector<double> qEA_values(total_size);
+    const int diagonal_size = std::min(num_param1, num_param2);
+    std::vector<double> diagonal_ratios(0);
+    diagonal_ratios.reserve(diagonal_size);
+    std::vector<Eigen::VectorXcd> diagonal_eigenvalues(0);
+    diagonal_eigenvalues.reserve(diagonal_size);
 
     // Progress tracking
     std::atomic<int> progress_counter(0);
-    const int total_iterations = num_param1 * num_param2;
 
     // Spacing parameters
     const double log_param1_min = std::log10(param1_min);
@@ -143,7 +129,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     const double log_param2_step = (log_param2_max - log_param2_min) / (num_param2 - 1);
 
     // Main loop for the calculations with parallelization
-    #pragma omp parallel for collapse(2) schedule(static)
+    #pragma omp parallel for collapse(2) schedule(guided)
     for (int i = 0; i < num_param1; ++i) {
         for (int j = 0; j < num_param2; ++j) {
 
@@ -154,76 +140,85 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             const double U_val = is_U_fixed ? U : (is_T_fixed ? param1 : param2);
             const double mu_val = is_T_fixed ? param2 : (is_U_fixed ? param2 : mu);
 
-            const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(TH, T_val, sigma_T, UH, U_val, sigma_U, uH, mu_val, sigma_u);
-
-            // Diagonalization
-            Eigen::MatrixXcd eigenvectors;
-            Eigen::VectorXcd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
-            Op::sort_eigen(eigenvalues, eigenvectors);
-
-            // Gap ratios
-            const Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
-            const double gap_ratio = vec_ratios.sum() / vec_ratios.size();
-
-            // Extract ground state once for both SPDM and fluctuations
-            const Eigen::VectorXcd& phi0 = eigenvectors.col(0);
-
-            // SPDM
-            const Eigen::MatrixXcd spdm = SPDM(basis, tags, phi0);
-
-            // Condensate fraction
-            const Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm);
-            const double lambda_0 = solver.eigenvalues().maxCoeff();
-            const double N = spdm.trace().real();
-            const double condensate_fraction = lambda_0 / N; 
-
-            // Local fluctuation
-            const double fluctuations = local_fluctu(phi0, basis);
-
             const int index = i * num_param2 + j;
+            
+            // Initialization of variables
+            const int m = basis.rows();
+            double sum_gap_ratio = 0.0, sum_condensate_fraction = 0.0, sum_fluctuations = 0.0;
+            Eigen::VectorXd q1 = Eigen::VectorXd::Zero(m), q2 = Eigen::VectorXd::Zero(m);
+            const bool is_diagonal = (j == num_param2 - i - 1);
+            Eigen::VectorXcd sum_eigenvalues = is_diagonal ? Eigen::VectorXcd::Zero(nb_eigen) : Eigen::VectorXcd();
+            
+            // Loop over disorder realizations
+            for (int real = 0; real < realizations; ++real) {
+                const unsigned int seed = static_cast<unsigned int>(std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (index * 1000000 + real));
+                const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(TH, T_val, sigma_T, UH, U_val, sigma_U, uH, mu_val, sigma_u, seed);
+
+                // Diagonalization
+                Eigen::MatrixXcd eigenvectors;
+                Eigen::VectorXcd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
+                Op::sort_eigen(eigenvalues, eigenvectors);
+
+                // Gap ratios
+                const Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
+                sum_gap_ratio += vec_ratios.sum() / vec_ratios.size();
+
+                // SPDM
+                const Eigen::MatrixXcd spdm = SPDM(basis, tags, eigenvectors.col(0));
+
+                // Condensate fraction
+                Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm, Eigen::EigenvaluesOnly);
+                sum_condensate_fraction += solver.eigenvalues().maxCoeff() / spdm.trace().real();
                 
+                // Fluctuations and Edwards-Anderson parameter
+                const auto [mean_ni, mean_ni_sq, site_ni] = mean_occupations(eigenvectors.col(0), basis);
+                sum_fluctuations += mean_ni_sq - mean_ni * mean_ni;
+                q1 += site_ni.cwiseProduct(site_ni);
+                q2 += site_ni;                        
+                
+                // Eigenvalues on the antidiagonal
+                if (is_diagonal) {
+                    sum_eigenvalues += eigenvalues;
+                }
+            }
+            
+            // Averages over disorder realizations
+            const double inv_r = 1.0 / realizations;
             param1_values[index] = param1;
             param2_values[index] = param2;
-            gap_ratios_values[index] = gap_ratio;
-            condensate_fraction_values[index] = condensate_fraction;
-            fluctuations_values[index] = fluctuations;
-            matrix_ratios.row(index) = vec_ratios;
-                
-            #pragma omp critical
-            {
-                if(j == num_param2 - i - 1){
-                    spdm_matrices.push_back(spdm.real());
-                    diagonal_eigenvalues.push_back(eigenvalues);
+            gap_ratios_values[index] = sum_gap_ratio * inv_r;
+            condensate_fraction_values[index] = sum_condensate_fraction * inv_r;
+            fluctuations_values[index] = sum_fluctuations * inv_r;
+            const Eigen::VectorXd q2_avg = q2 * inv_r;
+            qEA_values[index] = ((q1 * inv_r) - q2_avg.cwiseProduct(q2_avg)).sum() / m;
+            
+            if (is_diagonal) {
+                #pragma omp critical
+                {
+                    diagonal_eigenvalues.push_back(sum_eigenvalues * inv_r);
                     diagonal_ratios.push_back(param1 / param2);
                 }
             }
+            
+            // Progress
             const int local_count = progress_counter.fetch_add(1) + 1;
-            if (local_count % 10 == 0 || local_count == total_iterations) {
-                const int percent = (local_count * 100) / total_iterations;
+            if (local_count % 10 == 0 || local_count == total_size) {
+                const int percent = (local_count * 100) / total_size;
                 std::cout << "\r" << percent << "%" << std::flush;
             }
         }
     }
 
     // Save the results to a file
-    for (int i = 0; i < num_param1 * num_param2; ++i) {
-        file << param1_values[i] << " " << param2_values[i] << " " << gap_ratios_values[i] << " " << condensate_fraction_values[i] << " " << fluctuations_values[i] << std::endl;
+    for (int i = 0; i < total_size; ++i) {
+        file << param1_values[i] << " " << param2_values[i] << " " << gap_ratios_values[i] << " " << condensate_fraction_values[i] << " " << fluctuations_values[i] << " " << qEA_values[i] << std::endl;
     }
     file.close();
 
-    // Save diagonal eigenvalues to file
+    // Save eigenvalues
     std::ofstream eigen_file("eigenvalues_diagonal.txt");
-    std::string param1_name, param2_name;
-    if (fixed_param == "T") {
-        param1_name = "U";
-        param2_name = "mu";
-    } else if (fixed_param == "U") {
-        param1_name = "T";
-        param2_name = "mu";
-    } else {
-        param1_name = "T";
-        param2_name = "U";
-    }
+    const std::string param1_name = is_T_fixed ? "U" : (is_U_fixed ? "T" : "T");
+    const std::string param2_name = is_T_fixed ? "mu" : (is_U_fixed ? "mu" : "U");
     eigen_file << "# Ratio " << param1_name << "/" << param2_name << " Eigenvalues" << std::endl;
     for (size_t k = 0; k < diagonal_eigenvalues.size(); ++k) {
         eigen_file << diagonal_ratios[k];
@@ -233,37 +228,6 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
         eigen_file << std::endl;
     }
     eigen_file.close();
-    
-    // // PCA, dispersion
-    // std::vector<Eigen::MatrixXd> pca_matrices;
-    // std::vector<double> dispersions;
-
-    // // Main loop for the PCA and dispersion
-    // int num_rows = 3;
-    // for (int i = 0; i < param1_max; ++i) {
-
-    //     // Choose a subset of the matrix to analyze
-    //     int start_row = static_cast<int>(std::max(param2_max - num_rows - i * (param2_max - num_rows) / param1_max, 0.0));
-    //     int end_row = static_cast<int>(std::max(param2_max - i * (param2_max - num_rows) / param1_max, 0.0 + num_rows));
-    //     Eigen::MatrixXd sub_matrix = matrix_ratios.block(i + start_row, 0, i + end_row, matrix_ratios.cols());
-
-    //     // PCA
-    //     sub_matrix = standardize_matrix(sub_matrix);
-    //     sub_matrix = (sub_matrix.adjoint() * sub_matrix) / double(sub_matrix.rows() - 1);
-    //     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(sub_matrix);
-    //     Eigen::MatrixXd eigenvectors2 = eigensolver.eigenvectors().real().rowwise().reverse();
-    //     Eigen::MatrixXd projected_data = sub_matrix * eigenvectors2.leftCols(2);
-    //     pca_matrices.push_back(projected_data);
-
-    //     // Dispersion
-    //     double dispersion = calculate_dispersion(projected_data);
-    //     dispersions.push_back(dispersion);
-    // }
-
-    // // Save the results to a file
-    // save_matrices_to_csv("spdm_matrices.csv", spdm_matrices, "Matrix");
-    // save_matrices_to_csv("pca_results.csv", pca_matrices, "PCA");
-    // save_dispersions("dispersions.csv", dispersions);
 }
 
 
@@ -303,7 +267,6 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     const int m = basis.rows();
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
-
     std::unordered_map<double, int> tag_index;
     tag_index.reserve(D);
     for (int k = 0; k < D; ++k) {
@@ -311,7 +274,6 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     }
     static constexpr int primes[] = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
     static const std::vector<int> primes_vec(std::begin(primes), std::end(primes));
-
     for (int i = 0; i < m; ++i) {
         for (int j = i; j < m; ++j) {
             std::complex<double> sum = 0.0;
@@ -345,131 +307,22 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     return spdm;
 }
 
-/* Calculate the mean value of the operator <phi0|ai+ aj|phi0> */
-std::complex<double> Analysis::braket(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int i, int j){
-    std::complex<double> val = 0.0;
-    const int D = basis.cols();
-    if (i == j) {
-        for (int k = 0; k < D; ++k) {
-            double ni = static_cast<double>(basis(i, k));
-            double prob = std::norm(phi0[k]);
-            val += prob * ni;
-        }
-        return val;
-    }
-    static const std::vector<int> primes = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
-    for (int k = 0; k < D; ++k) {
-        double ni = basis(i, k);
-        double nj = basis(j, k);
-        if (nj < 1) continue;                     
-        double factor = std::sqrt((ni + 1) * nj);
-        Eigen::VectorXd state = basis.col(k);
-        state(i) += 1;
-        state(j) -= 1;
-        double new_tag = BH::calculate_tag(state, primes);
-        int idx = BH::search_tag(tags, new_tag);
-        if (idx >= 0) {
-            val += std::conj(phi0[k]) * phi0[idx] * factor;
-        }
-    }
-    return val;
-}
-
-double Analysis::local_fluctu(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
+/* Calculate site occupations: returns (spatial_avg_ni, spatial_avg_ni_sq, per_site_ni) */
+std::tuple<double, double, Eigen::VectorXd> Analysis::mean_occupations(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
     const int m = basis.rows();
     const int D = basis.cols();
-    double sum = 0.0;
-    for (int i = 0; i < m; ++i) {
-        double mean_n = 0.0;
-        double mean_n2 = 0.0;
-        for (int k = 0; k < D; ++k) {
-            const double prob = std::norm(phi0[k]);
+    double sum_ni = 0.0;
+    double sum_ni_sq = 0.0;
+    Eigen::VectorXd site_ni = Eigen::VectorXd::Zero(m);
+    for (int k = 0; k < D; ++k) {
+        const double prob = std::norm(phi0[k]);
+        for (int i = 0; i < m; ++i) {
             const double ni = basis(i, k);
-            mean_n += prob * ni;
-            mean_n2 += prob * ni * ni;
+            const double prob_ni = prob * ni;
+            sum_ni += prob_ni;
+            sum_ni_sq += prob * ni * ni;
+            site_ni[i] += prob_ni;
         }
-        sum += mean_n2 - mean_n * mean_n;
     }
-    return sum / m;
-}
-
-                    ///// UTILITY FUNCTIONS /////
-
-
-        /* PCA FUNCTIONS */
-
-/* calculate the dispersion of the projected points */
-double Analysis::calculate_dispersion(const Eigen::MatrixXd& projected_data) {
-
-    // Calculate the mean of the projected data
-    Eigen::VectorXd mean = projected_data.colwise().mean();
-
-    // Center the projected data
-    Eigen::MatrixXd centered = projected_data.rowwise() - mean.transpose();
-
-    // Calculate the variances of the projected data
-    Eigen::VectorXd variances = (centered.array().square().colwise().sum() / (centered.rows() - 1)).matrix();
-    double dispersion = variances.sum();
-
-    return dispersion;
-}
-
-
-        /* STANDARDIZATION */
-
-/* standardize a matrix */
-Eigen::MatrixXd Analysis::standardize_matrix(const Eigen::MatrixXd& matrix) {
-
-    // Initialize the standardized matrix
-    Eigen::MatrixXd standardized_matrix = matrix;
-
-    // Calculate the mean and standard deviation of the matrix
-    Eigen::VectorXd mean = matrix.colwise().mean();
-    Eigen::VectorXd stddev = ((matrix.rowwise() - mean.transpose()).array().square().colwise().sum() / (matrix.rows() - 1)).sqrt();
-    
-    // Standardize the matrix
-    standardized_matrix = (matrix.rowwise() - mean.transpose()).array().rowwise() / stddev.transpose().array();
-    return standardized_matrix;
-}
-
-
-        /* SAVE TO CSV */
-
-/* Save the real part of matrices to a CSV file */
-void Analysis::save_matrices_to_csv(const std::string& filename, const std::vector<Eigen::MatrixXd>& matrices, const std::string& label) {
-    std::ofstream file(filename);
-    if (file.is_open()) {
-        for (size_t k = 0; k < matrices.size(); ++k) {
-            file << label << " " << k << std::endl;
-            const Eigen::MatrixXd& matrix = matrices[k];
-            for (int i = 0; i < matrix.rows(); ++i) {
-                for (int j = 0; j < matrix.cols(); ++j) {
-                    file << matrix(i, j);
-                    if (j < matrix.cols() - 1) {
-                        file << ",";
-                    }
-                }
-                file << std::endl;
-            }
-            file << std::endl;
-        }
-        file.close();
-    } else {
-        std::cerr << "Unable to open file: " << filename << std::endl;
-    }
-}
-
-/* Save the dispersions to a file */
-void Analysis::save_dispersions(const std::string& filename, const std::vector<double>& dispersions) {
-    std::ofstream file(filename);
-    if (file.is_open()) {
-        for (size_t k = 0; k < dispersions.size(); ++k) {
-            file << "Dispersion " << k << std::endl;
-            file << dispersions[k] << std::endl;
-            file << std::endl;
-        }
-        file.close();
-    } else {
-        std::cerr << "Unable to open file: " << filename << std::endl;
-    }
+    return {sum_ni / m, sum_ni_sq / m, site_ni};
 }

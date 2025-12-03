@@ -25,7 +25,8 @@ void print_usage() {
               << "  -f, --fixed       Fixed parameter (T, U or u)\n"
               << "  -t, --sigma-t     Disorder variance for hopping (default: 0.0)\n"
               << "  -V, --sigma-U     Disorder variance for interaction (default: 0.0)\n"
-              << "  -v, --sigma-u     Disorder variance for chemical potential (default: 0.0)\n";
+              << "  -v, --sigma-u     Disorder variance for chemical potential (default: 0.0)\n"
+              << "  -R, --realizations Number of disorder realizations (default: 1)\n";
 }
 
 
@@ -35,9 +36,10 @@ int main(int argc, char *argv[]) {
     int m, n;
     double T, U, mu, s, r;
     double sigma_t = 0.0, sigma_U = 0.0, sigma_u = 0.0;
+    int realizations = 1;
     std::string fixed_param;
 
-    const char* const short_opts = "m:n:T:U:u:r:s:f:t:V:v:h";
+    const char* const short_opts = "m:n:T:U:u:r:s:f:t:V:v:R:h";
     const option long_opts[] = {
         {"sites", required_argument, nullptr, 'm'},
         {"bosons", required_argument, nullptr, 'n'},
@@ -50,6 +52,7 @@ int main(int argc, char *argv[]) {
         {"sigma-t", required_argument, nullptr, 't'},
         {"sigma-U", required_argument, nullptr, 'V'},
         {"sigma-u", required_argument, nullptr, 'v'},
+        {"realizations", required_argument, nullptr, 'R'},
 		{"help", no_argument, nullptr, 'h'},
         {nullptr, no_argument, nullptr, 0}
     };
@@ -91,6 +94,9 @@ int main(int argc, char *argv[]) {
             case 'v':
                 sigma_u = std::stod(optarg);
                 break;
+            case 'R':
+                realizations = std::stoi(optarg);
+                break;
             case 'h':
             default:
                 print_usage();
@@ -106,9 +112,13 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: fixed parameter must be T, U or u." << std::endl;
         return 1;
     }
+    if (realizations < 1) {
+        std::cerr << "Error: realizations must be at least 1." << std::endl;
+        return 1;
+    }
 
     // Calculate the exact parameters
-    Analysis::exact_parameters(m, n, T, U, mu, s, r, fixed_param, sigma_t, sigma_U, sigma_u);
+    Analysis::exact_parameters(m, n, T, U, mu, s, r, fixed_param, sigma_t, sigma_U, sigma_u, realizations);
 
     // Execute the Python script to plot the results
     auto run_python_script = []() -> int {
