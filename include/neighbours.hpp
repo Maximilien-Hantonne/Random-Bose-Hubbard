@@ -3,18 +3,8 @@
 #include <cmath>
 #include <vector>
 
-class Neighbours {
-public:
-
-    Neighbours(int m);
-    ~Neighbours();
-
-    void chain_neighbours(bool closed = true);
-    void square_neighbours(bool closed = true);
-    void cube_neighbours(bool closed = true);
-    std::vector<std::vector<int>> getNeighbours() const;
-    
-private:
-    int m;
-    std::vector<std::vector<int>> neighbours;
-};
+namespace Neighbours {
+    std::vector<std::vector<int>> chain_neighbours(int m, bool closed = true);
+    std::vector<std::vector<int>> square_neighbours(int m, bool closed = true);
+    std::vector<std::vector<int>> cube_neighbours(int m, bool closed = true);
+}

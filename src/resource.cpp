@@ -87,4 +87,5 @@ void Resource::set_omp_threads(const Eigen::SparseMatrix<double>& matrix, int nb
     int memory_threads = static_cast<int>(usable_memory / total_memory);
     int num_threads = std::max(6, std::min(memory_threads, max_threads));
     omp_set_num_threads(num_threads);
+    std::cout << num_threads << " threads";
 }

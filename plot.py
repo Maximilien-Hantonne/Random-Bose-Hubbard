@@ -16,8 +16,12 @@ def load_phase_data():
         fixed_param_line = file.readline().strip().split()
         fixed_param = fixed_param_line[0]
         fixed_value = float(fixed_param_line[1])
+        metadata_line = file.readline().strip().split()
+        m = int(metadata_line[1])
+        n = int(metadata_line[3])
+        R = int(metadata_line[5])
         data = np.loadtxt(file)
-    return fixed_param, fixed_value, data
+    return fixed_param, fixed_value, m, n, R, data
 
 def get_parameter_labels(fixed_param):
     if fixed_param == "T":
@@ -85,7 +89,7 @@ def plot_eigenvalues(ratios, eigenvalues, header, output_dir):
 
 # Load data
 ratios, eigenvalues, header = load_eigenvalues()
-fixed_param, fixed_value, data = load_phase_data()
+fixed_param, fixed_value, m, n, R, data = load_phase_data()
 x_label, y_label, non_fixed_param1, non_fixed_param2 = get_parameter_labels(fixed_param)
 
 # Extract data columns
@@ -121,7 +125,7 @@ fluctuations_blurred = gaussian_filter(fluctuations_grid, sigma=sigma)
 qEA_blurred = gaussian_filter(qEA_grid, sigma=sigma)
 
 # Create output directory
-output_dir = f'figures/{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}'
+output_dir = f'figures/m{m}_n{n}_{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}_R{R}'
 os.makedirs(output_dir, exist_ok=True)
 
 # Generate phase map plots
@@ -138,4 +142,5 @@ plot_phase_map(x_grid, y_grid, fluctuations_blurred, 'Fluctuations in Boson Numb
                'fluctuations_plot.svg', f'Fluctuations with respect to {x_label} and {y_label}')
 
 plot_phase_map(x_grid, y_grid, qEA_blurred, 'Edwards-Anderson Order Parameter ($q_{EA}$)', x_label, y_label, output_dir,
-               'qEA_plot.svg', f'Edwards-Anderson Parameter with respect to {x_label} and {y_label}')
+               'qEA_plot.svg', f'Edwards-Anderson Parameter with respect to {x_label} and {y_label}',
+               f'Note: Averaged over {R} disorder realizations')

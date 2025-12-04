@@ -10,7 +10,7 @@ namespace Analysis
             ///// EXACT CALCULATIONS /////
 
 /* Calculate the gap ratios, spdm, boson density, and compressibility for a range of parameters */
-static void calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T = 0.0, const double sigma_U = 0.0, const double sigma_u = 0.0, const int realizations = 1);
+static void calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T = 0.0, const double sigma_U = 0.0, const double sigma_u = 0.0, const int realizations = 1, const int m = 0, const int n = 0);
 
 // GAP RATIOS
 

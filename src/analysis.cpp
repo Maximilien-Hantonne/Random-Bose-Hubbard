@@ -6,6 +6,7 @@
 #include <iostream>
 #include <algorithm>
 #include <thread>
+#include <omp.h>
 
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
@@ -38,10 +39,8 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     Resource::timer();
 
     // Set the geometry of the lattice
-    Neighbours neighbours(m);
-    neighbours.chain_neighbours();
-    // neighbours.square_neighbours();
-    const std::vector<std::vector<int>>& nei = neighbours.getNeighbours();
+    const std::vector<std::vector<int>> nei = Neighbours::chain_neighbours(m);
+    // const std::vector<std::vector<int>> nei = Neighbours::square_neighbours(m);
 
     // // Set the matrices for each term of the Hamiltonian in the Fock states from 1 to n bosons
     // int n_min = 1, n_max = n;
@@ -63,7 +62,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     double T_min = T, T_max = T + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
 
     // Calculate the exact parameters
-    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_U, sigma_u, realizations);
+    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, sigma_t, sigma_U, sigma_u, realizations, m, n);
 
     // End of the calculations
     std::cout << " - ";
@@ -75,7 +74,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T, const double sigma_U, const double sigma_u, const int realizations) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T, const double sigma_U, const double sigma_u, const int realizations, const int m, const int n) {
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
@@ -87,6 +86,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     } else {
         file << mu << std::endl;
     }
+    file << "m " << m << " n " << n << " R " << realizations << std::endl;
     
     // Parameters for the calculations
     const int nb_eigen = 20;
@@ -119,6 +119,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
 
     // Progress tracking
     std::atomic<int> progress_counter(0);
+    const int num_threads = omp_get_max_threads();
 
     // Spacing parameters
     const double log_param1_min = std::log10(param1_min);
@@ -143,15 +144,20 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             const int index = i * num_param2 + j;
             
             // Initialization of variables
-            const int m = basis.rows();
             double sum_gap_ratio = 0.0, sum_condensate_fraction = 0.0, sum_fluctuations = 0.0;
-            Eigen::VectorXd q1 = Eigen::VectorXd::Zero(m), q2 = Eigen::VectorXd::Zero(m);
+            Eigen::VectorXd q1 = (realizations > 1) ? Eigen::VectorXd::Zero(m) : Eigen::VectorXd();
+            Eigen::VectorXd q2 = (realizations > 1) ? Eigen::VectorXd::Zero(m) : Eigen::VectorXd();
             const bool is_diagonal = (j == num_param2 - i - 1);
             Eigen::VectorXcd sum_eigenvalues = is_diagonal ? Eigen::VectorXcd::Zero(nb_eigen) : Eigen::VectorXcd();
             
+            // Pre-compute thread hash once per parameter point
+            const size_t thread_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            
             // Loop over disorder realizations
             for (int real = 0; real < realizations; ++real) {
-                const unsigned int seed = static_cast<unsigned int>(std::hash<std::thread::id>{}(std::this_thread::get_id()) ^ (index * 1000000 + real));
+                const unsigned int seed = static_cast<unsigned int>(
+                    thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real)
+                );
                 const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(TH, T_val, sigma_T, UH, U_val, sigma_U, uH, mu_val, sigma_u, seed);
 
                 // Diagonalization
@@ -160,8 +166,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 Op::sort_eigen(eigenvalues, eigenvectors);
 
                 // Gap ratios
-                const Eigen::VectorXd vec_ratios = gap_ratios(eigenvalues, nb_eigen);
-                sum_gap_ratio += vec_ratios.sum() / vec_ratios.size();
+                sum_gap_ratio += gap_ratios(eigenvalues, nb_eigen).mean();
 
                 // SPDM
                 const Eigen::MatrixXcd spdm = SPDM(basis, tags, eigenvectors.col(0));
@@ -173,8 +178,10 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 // Fluctuations and Edwards-Anderson parameter
                 const auto [mean_ni, mean_ni_sq, site_ni] = mean_occupations(eigenvectors.col(0), basis);
                 sum_fluctuations += mean_ni_sq - mean_ni * mean_ni;
-                q1 += site_ni.cwiseProduct(site_ni);
-                q2 += site_ni;                        
+                if (realizations > 1) {
+                    q1 += site_ni.array().square().matrix();
+                    q2 += site_ni;
+                }                        
                 
                 // Eigenvalues on the antidiagonal
                 if (is_diagonal) {
@@ -189,8 +196,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             gap_ratios_values[index] = sum_gap_ratio * inv_r;
             condensate_fraction_values[index] = sum_condensate_fraction * inv_r;
             fluctuations_values[index] = sum_fluctuations * inv_r;
-            const Eigen::VectorXd q2_avg = q2 * inv_r;
-            qEA_values[index] = ((q1 * inv_r) - q2_avg.cwiseProduct(q2_avg)).sum() / m;
+            qEA_values[index] = (realizations > 1) ? (((q1 * inv_r) - (q2 * inv_r).array().square().matrix()).sum() / m) : 0.0;
             
             if (is_diagonal) {
                 #pragma omp critical
@@ -204,7 +210,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             const int local_count = progress_counter.fetch_add(1) + 1;
             if (local_count % 10 == 0 || local_count == total_size) {
                 const int percent = (local_count * 100) / total_size;
-                std::cout << "\r" << percent << "%" << std::flush;
+                std::cout << "\r" << num_threads << " threads - " << percent << "%" << std::flush;
             }
         }
     }
@@ -267,6 +273,10 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     const int m = basis.rows();
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
+    Eigen::VectorXd probs(D);
+    for (int k = 0; k < D; ++k) {
+        probs[k] = std::norm(phi0[k]);
+    }
     std::unordered_map<double, int> tag_index;
     tag_index.reserve(D);
     for (int k = 0; k < D; ++k) {
@@ -279,9 +289,7 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
             std::complex<double> sum = 0.0;
             if (i == j) {
                 for (int k = 0; k < D; ++k) {
-                    const double ni = basis(i, k);
-                    const double prob = std::norm(phi0[k]);
-                    sum += prob * ni;
+                    sum += probs[k] * basis(i, k);
                 }
             } else {
                 for (int k = 0; k < D; ++k) {
