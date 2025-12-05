@@ -288,19 +288,25 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
 }
 
 
-    /* RANDOMIZE HAMILTONIAN */
+    /* RANDOM HAMILTONIAN */
 
 Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& TH, const double T, const double sigma_T,
                                                       const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                                       const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
                                                       const unsigned int seed) {
     const int n = TH.rows();
-    std::vector<Eigen::Triplet<double>> triplets;
-    triplets.reserve(TH.nonZeros() + UH.nonZeros() + uH.nonZeros());
-    
     const bool has_T_disorder = (sigma_T > 0.0);
     const bool has_U_disorder = (delta_U > 0.0);
     const bool has_u_disorder = (delta_u > 0.0);
+    
+    // Without disorder
+    if (!has_T_disorder && !has_U_disorder && !has_u_disorder) {
+        return T * TH + U * UH + u * uH;
+    }
+    
+    // With disorder
+    std::vector<Eigen::Triplet<double>> triplets;
+    triplets.reserve(TH.nonZeros() + UH.nonZeros() + uH.nonZeros());
     std::mt19937 gen(seed);
     
     // Hopping term

@@ -27,7 +27,7 @@
         /* MAIN FUNCTIONS */
 
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double delta_U, double delta_u, int realizations, std::string scale) {
+void Analysis::exact_parameters(const int m, const int n, const double T, const double U, const double mu, const double s, const double r, const std::string& fixed_param, const double sigma_t, const double delta_U, const double delta_u, const int realizations, const std::string& scale) {
     
     // Prerequisites
     if (std::abs(T-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
@@ -90,11 +90,16 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     file << "m " << m << " n " << n << " R " << realizations << " scale " << scale << std::endl;
     
     // Parameters for the calculations
-    const int nb_eigen = 20;
+    constexpr int nb_eigen = 20;
 
-    // Hoist fixed_param comparisons to avoid string comparison in loop
     const bool is_T_fixed = (fixed_param == "T");
     const bool is_U_fixed = (fixed_param == "U");
+    const bool compute_qEA = (realizations > 1);
+    const bool has_disorder = (sigma_T > 0.0 || delta_U > 0.0 || delta_u > 0.0);
+
+    const double inv_r = 1.0 / realizations;
+    const double inv_m = 1.0 / m;
+    const ScaleType scale_type = parse_scale(scale);
 
     // Varying parameters
     const double param1_min = is_T_fixed ? U_min : (is_U_fixed ? T_min : T_min);
@@ -102,9 +107,15 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     const double param2_min = is_T_fixed ? mu_min : (is_U_fixed ? mu_min : U_min);
     const double param2_max = is_T_fixed ? mu_max : (is_U_fixed ? mu_max : U_max);
     
-    // Matrices initialization
+    // Grid sizes
     const int num_param1 = static_cast<int>((param1_max - param1_min) / param1_step) + 1;
     const int num_param2 = static_cast<int>((param2_max - param2_min) / param2_step) + 1;
+    
+    // Parameter values
+    const std::vector<double> param1_precomputed = precompute_params(param1_min, param1_max, num_param1, scale_type);
+    const std::vector<double> param2_precomputed = precompute_params(param2_min, param2_max, num_param2, scale_type);
+
+    // Matrices initialization
     const int total_size = num_param1 * num_param2;
     std::vector<double> param1_values(total_size);
     std::vector<double> param2_values(total_size);
@@ -115,7 +126,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     const int diagonal_size = std::min(num_param1, num_param2);
     std::vector<double> diagonal_ratios(0);
     diagonal_ratios.reserve(diagonal_size);
-    std::vector<Eigen::VectorXcd> diagonal_eigenvalues(0);
+    std::vector<Eigen::VectorXd> diagonal_eigenvalues(0);
     diagonal_eigenvalues.reserve(diagonal_size);
 
     // Progress tracking
@@ -127,9 +138,8 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     for (int i = 0; i < num_param1; ++i) {
         for (int j = 0; j < num_param2; ++j) {
 
-            const double param1 = compute_param(param1_min, param1_max, i, num_param1, scale);
-            const double param2 = compute_param(param2_min, param2_max, j, num_param2, scale);
-            
+            const double param1 = param1_precomputed[i];
+            const double param2 = param2_precomputed[j];
             const double T_val = is_T_fixed ? T : param1;
             const double U_val = is_U_fixed ? U : (is_T_fixed ? param1 : param2);
             const double mu_val = is_T_fixed ? param2 : (is_U_fixed ? param2 : mu);
@@ -138,40 +148,50 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             
             // Initialization of variables
             double sum_gap_ratio = 0.0, sum_condensate_fraction = 0.0, sum_fluctuations = 0.0;
-            Eigen::VectorXd q1 = (realizations > 1) ? Eigen::VectorXd::Zero(m) : Eigen::VectorXd();
-            Eigen::VectorXd q2 = (realizations > 1) ? Eigen::VectorXd::Zero(m) : Eigen::VectorXd();
             const bool is_diagonal = (j == num_param2 - i - 1);
-            Eigen::VectorXcd sum_eigenvalues = is_diagonal ? Eigen::VectorXcd::Zero(nb_eigen) : Eigen::VectorXcd();
-            
-            // Pre-compute thread hash once per parameter point
-            const size_t thread_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            Eigen::VectorXd sum_eigenvalues;
+            if (is_diagonal) {
+                sum_eigenvalues = Eigen::VectorXd::Zero(nb_eigen);
+            }
+            Eigen::VectorXd q1, q2;
+            if (compute_qEA) {
+                q1 = Eigen::VectorXd::Zero(m);
+                q2 = Eigen::VectorXd::Zero(m);
+            }
+            size_t thread_hash = 0;
+            if (has_disorder) {
+                thread_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
+            }
             
             // Loop over disorder realizations
             for (int real = 0; real < realizations; ++real) {
-                const unsigned int seed = static_cast<unsigned int>(
-                    thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real)
-                );
+                const unsigned int seed = has_disorder 
+                    ? static_cast<unsigned int>(thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real))
+                    : 0u;
                 const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(TH, T_val, sigma_T, UH, U_val, delta_U, uH, mu_val, delta_u, seed);
 
                 // Diagonalization
                 Eigen::MatrixXcd eigenvectors;
-                Eigen::VectorXcd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
+                Eigen::VectorXd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors);
                 Op::sort_eigen(eigenvalues, eigenvectors);
 
                 // Gap ratios
-                sum_gap_ratio += gap_ratios(eigenvalues, nb_eigen).mean();
+                sum_gap_ratio += gap_ratios(eigenvalues, nb_eigen);
+
+                // Ground state
+                const Eigen::VectorXcd& ground_state = eigenvectors.col(0);
 
                 // SPDM
-                const Eigen::MatrixXcd spdm = SPDM(basis, tags, eigenvectors.col(0));
+                const Eigen::MatrixXcd spdm = SPDM(basis, tags, ground_state);
 
                 // Condensate fraction
                 Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm, Eigen::EigenvaluesOnly);
                 sum_condensate_fraction += solver.eigenvalues().maxCoeff() / spdm.trace().real();
                 
                 // Fluctuations and Edwards-Anderson parameter
-                const auto [mean_ni, mean_ni_sq, site_ni] = mean_occupations(eigenvectors.col(0), basis);
+                const auto [mean_ni, mean_ni_sq, site_ni] = mean_occupations(ground_state, basis);
                 sum_fluctuations += mean_ni_sq - mean_ni * mean_ni;
-                if (realizations > 1) {
+                if (compute_qEA) {
                     q1 += site_ni.array().square().matrix();
                     q2 += site_ni;
                 }                        
@@ -183,14 +203,17 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             }
             
             // Averages over disorder realizations
-            const double inv_r = 1.0 / realizations;
             param1_values[index] = param1;
             param2_values[index] = param2;
             gap_ratios_values[index] = sum_gap_ratio * inv_r;
             condensate_fraction_values[index] = sum_condensate_fraction * inv_r;
             fluctuations_values[index] = sum_fluctuations * inv_r;
-            qEA_values[index] = (realizations > 1) ? (((q1 * inv_r) - (q2 * inv_r).array().square().matrix()).sum() / m) : 0.0;
-            
+            if (compute_qEA) {
+                const Eigen::VectorXd q2_avg = q2 * inv_r;
+                qEA_values[index] = ((q1 * inv_r - q2_avg.array().square().matrix()).sum() * inv_m);
+            } else {
+                qEA_values[index] = 0.0;
+            }
             if (is_diagonal) {
                 #pragma omp critical
                 {
@@ -222,7 +245,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     for (size_t k = 0; k < diagonal_eigenvalues.size(); ++k) {
         eigen_file << diagonal_ratios[k];
         for (int e = 0; e < diagonal_eigenvalues[k].size(); ++e) {
-            eigen_file << " " << diagonal_eigenvalues[k][e].real();
+            eigen_file << " " << diagonal_eigenvalues[k][e];
         }
         eigen_file << std::endl;
     }
@@ -230,49 +253,70 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
 }
 
 /* Compute parameter value at a given index based on scale type */
-double Analysis::compute_param(double p_min, double p_max, int idx, int num_points, const std::string& scale) {
+double Analysis::compute_param(double p_min, double p_max, int idx, int num_points, ScaleType scale) {
     if (num_points <= 1) return p_min;
-    if (scale == "log") {
-        const double log_min = std::log10(p_min);
-        const double log_max = std::log10(p_max);
-        const double log_step = (log_max - log_min) / (num_points - 1);
-        return std::pow(10.0, log_min + idx * log_step);
-    } 
-    if (scale == "lin") { // "lin" or default
-        const double lin_step = (p_max - p_min) / (num_points - 1);
-        return p_min + idx * lin_step;
+    
+    switch (scale) {
+        case ScaleType::Logarithmic: {
+            const double log_min = std::log10(p_min);
+            const double log_max = std::log10(p_max);
+            const double log_step = (log_max - log_min) / (num_points - 1);
+            return std::pow(10.0, log_min + idx * log_step);
+        }
+        case ScaleType::Linear:
+        default: {
+            const double lin_step = (p_max - p_min) / (num_points - 1);
+            return p_min + idx * lin_step;
+        }
     }
-    else {
-        throw std::invalid_argument("This scale is not implemented yet: " + scale);
+}
+
+/* Precompute all parameter values for a range */
+std::vector<double> Analysis::precompute_params(double p_min, double p_max, int num_points, ScaleType scale) {
+    std::vector<double> params(num_points);
+    if (num_points <= 1) {
+        if (num_points == 1) params[0] = p_min;
+        return params;
     }
+    switch (scale) {
+        case ScaleType::Logarithmic: {
+            const double log_min = std::log10(p_min);
+            const double log_step = (std::log10(p_max) - log_min) / (num_points - 1);
+            for (int i = 0; i < num_points; ++i) {
+                params[i] = std::pow(10.0, log_min + i * log_step);
+            }
+            break;
+        }
+        case ScaleType::Linear:
+        default: {
+            const double lin_step = (p_max - p_min) / (num_points - 1);
+            for (int i = 0; i < num_points; ++i) {
+                params[i] = p_min + i * lin_step;
+            }
+            break;
+        }
+    }
+    return params;
 }
 
         /* GAP RATIOS */
 
-/* Calculate the energy gap ratios of the system */
-Eigen::VectorXd Analysis::gap_ratios(const Eigen::VectorXcd& eigenvalues, int nb_eigen) {
-    Eigen::VectorXd gap_ratios(nb_eigen - 2);
-
-    // Sort the eigenvalues by their real part
-    std::vector<double> sorted_eigenvalues(nb_eigen);
-    for (int i = 0; i < nb_eigen; ++i) {
-        sorted_eigenvalues[i] = eigenvalues[i].real();
-    }
-    std::sort(sorted_eigenvalues.begin(), sorted_eigenvalues.end());
-
-    // Calculate the gap ratios
+/* Calculate the energy gap ratios of the system and return their sum */
+double Analysis::gap_ratios(const Eigen::VectorXd& eigenvalues, int nb_eigen) {
+    double sum = 0.0;
+    
+    // Calculate the gap ratios and sum them
     for (int i = 1; i < nb_eigen - 1; ++i) {
-        const double E_prev = sorted_eigenvalues[i - 1];
-        const double E_curr = sorted_eigenvalues[i];
-        const double E_next = sorted_eigenvalues[i + 1];
+        const double E_prev = eigenvalues[i - 1];
+        const double E_curr = eigenvalues[i];
+        const double E_next = eigenvalues[i + 1];
         const double gap1 = E_next - E_curr;
         const double gap2 = E_curr - E_prev;
         const double min_gap = std::min(gap1, gap2);
         const double max_gap = std::max(gap1, gap2);
-        gap_ratios[i - 1] = (max_gap != 0.0) ? (min_gap / max_gap) : 0.0;
-        }
-
-    return gap_ratios;
+        sum += (max_gap != 0.0) ? (min_gap / max_gap) : 0.0;
+    }
+    return sum / (nb_eigen - 2);
 }
 
 
@@ -283,17 +327,23 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     const int m = basis.rows();
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
+    
+    // Precompute probabilities
     Eigen::VectorXd probs(D);
     for (int k = 0; k < D; ++k) {
         probs[k] = std::norm(phi0[k]);
     }
+    
+    // Build hash map once for O(1) lookup
     std::unordered_map<double, int> tag_index;
     tag_index.reserve(D);
     for (int k = 0; k < D; ++k) {
         tag_index.emplace(tags[k], k);
     }
+    
     static constexpr int primes[] = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
     static const std::vector<int> primes_vec(std::begin(primes), std::end(primes));
+    
     for (int i = 0; i < m; ++i) {
         for (int j = i; j < m; ++j) {
             std::complex<double> sum = 0.0;

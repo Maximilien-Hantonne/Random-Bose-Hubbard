@@ -40,12 +40,11 @@ long Resource::get_available_memory() {
 
 /* Estimate the memory usage of a sparse matrix */
 size_t Resource::estimateSparseMatrixMemoryUsage(const Eigen::SparseMatrix<double>& matrix) {
-    size_t numNonZeros = matrix.nonZeros();
-    size_t numCols = matrix.cols();
-    size_t memoryUsage = numNonZeros * sizeof(double);
-    memoryUsage += numNonZeros * sizeof(int); 
-    memoryUsage += (numCols + 1) * sizeof(int);
-    return memoryUsage;
+    const size_t numNonZeros = matrix.nonZeros();
+    const size_t numCols = matrix.cols();
+    // Values + row indices + column pointers
+    return numNonZeros * (sizeof(double) + sizeof(typename Eigen::SparseMatrix<double>::StorageIndex)) 
+           + (numCols + 1) * sizeof(typename Eigen::SparseMatrix<double>::StorageIndex);
 }
 
 
@@ -57,15 +56,15 @@ void Resource::timer() {
         start_time = std::chrono::high_resolution_clock::now();
         is_running = true;
     } else {
-        auto end_time = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> duration = end_time - start_time;
+        const auto end_time = std::chrono::high_resolution_clock::now();
+        const double duration_sec = std::chrono::duration<double>(end_time - start_time).count();
         is_running = false;
-        if (duration.count() > 60) {
-            int minutes = static_cast<int>(duration.count()) / 60;
-            double seconds = duration.count() - (minutes * 60);
+        if (duration_sec >= 60.0) {
+            const int minutes = static_cast<int>(duration_sec / 60.0);
+            const double seconds = duration_sec - minutes * 60.0;
             std::cout << "Duration: " << minutes << "m " << seconds << "s";
         } else {
-            std::cout << "Duration: " << duration.count() << "s";
+            std::cout << "Duration: " << duration_sec << "s";
         }
     }
 }
@@ -75,17 +74,21 @@ void Resource::timer() {
 
 /* Set the number of threads for OpenMP parallelization */
 void Resource::set_omp_threads(const Eigen::SparseMatrix<double>& matrix, int nb_matrix) {
-    int max_threads = omp_get_max_threads();
+    const int max_threads = omp_get_max_threads();
     if (nb_matrix <= 0 || matrix.nonZeros() == 0) {
         omp_set_num_threads(max_threads);
         return;
     }
-    size_t memory_per_matrix = estimateSparseMatrixMemoryUsage(matrix);
-    long available_memory = get_available_memory();
-    size_t usable_memory = static_cast<size_t>(available_memory) * 1024 * 0.8;
-    size_t total_memory = memory_per_matrix * nb_matrix;
-    int memory_threads = static_cast<int>(usable_memory / total_memory);
-    int num_threads = std::max(6, std::min(memory_threads, max_threads));
+    const size_t memory_per_matrix = estimateSparseMatrixMemoryUsage(matrix);
+    const long available_memory = get_available_memory();
+    if (available_memory <= 0) {
+        omp_set_num_threads(max_threads);
+        return;
+    }
+    const size_t usable_memory = static_cast<size_t>(available_memory * 1024) * 4 / 5; 
+    const size_t total_memory = memory_per_matrix * static_cast<size_t>(nb_matrix);
+    const int memory_threads = (total_memory > 0) ? static_cast<int>(usable_memory / total_memory) : max_threads;
+    const int num_threads = std::max(6, std::min(memory_threads, max_threads));
     omp_set_num_threads(num_threads);
     std::cout << num_threads << " threads";
 }

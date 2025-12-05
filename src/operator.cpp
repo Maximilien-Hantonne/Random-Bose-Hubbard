@@ -4,8 +4,8 @@
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
 #include <Eigen/Eigenvalues>
-#include <Spectra/GenEigsSolver.h>
-#include <Spectra/MatOp/SparseGenMatProd.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
 
 #include "operator.hpp"
 #include "Eigen/src/Core/Matrix.h"
@@ -18,14 +18,14 @@ using namespace Spectra;
 
     /* SORT EIGENVALUES AND EIGENVECTORS IN DESCENDING ORDER */
 
-/* Sort eigenvalues and eigenvectors in ascending order by real part of eigenvalue */
-void Op::sort_eigen(Eigen::VectorXcd& eigenvalues, Eigen::MatrixXcd& eigenvectors) {
+/* Sort eigenvalues and eigenvectors in ascending order by eigenvalue */
+void Op::sort_eigen(Eigen::VectorXd& eigenvalues, Eigen::MatrixXcd& eigenvectors) {
     const int n = eigenvalues.size();
     std::vector<int> indices(n);
     std::iota(indices.begin(), indices.end(), 0);
     std::sort(indices.begin(), indices.end(), 
-              [&eigenvalues](int i, int j) { return eigenvalues[i].real() < eigenvalues[j].real(); });
-    Eigen::VectorXcd temp_eigenvalues = eigenvalues;
+              [&eigenvalues](int i, int j) { return eigenvalues[i] < eigenvalues[j]; });
+    Eigen::VectorXd temp_eigenvalues = eigenvalues;
     Eigen::MatrixXcd temp_eigenvectors = eigenvectors;
     for (int i = 0; i < n; ++i) {
         eigenvalues[i] = temp_eigenvalues[indices[i]];
@@ -35,16 +35,16 @@ void Op::sort_eigen(Eigen::VectorXcd& eigenvalues, Eigen::MatrixXcd& eigenvector
 
     /* IMPLICITLY RESTARTED LANCZOS METHOD (IRLM) */
 
-/* implement the IRLM for a sparse matrix to find the smallest nb_eigen eigenvalues of a sparse matrix */
-Eigen::VectorXcd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen::MatrixXcd& eigenvectors) {
-    SparseGenMatProd<double> op(O); // create a compatible matrix object
-    GenEigsSolver<SparseGenMatProd<double>> eigs(op, nb_eigen, 2 * nb_eigen+1); // create an eigen solver object
+/* implement the IRLM for a sparse symmetric matrix to find the smallest nb_eigen eigenvalues */
+Eigen::VectorXd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen::MatrixXcd& eigenvectors) {
+    SparseSymMatProd<double> op(O); // create a matrix operation object for symmetric matrix
+    SymEigsSolver<SparseSymMatProd<double>> eigs(op, nb_eigen, 2 * nb_eigen+1); 
     eigs.init();
-    [[maybe_unused]] int nconv = eigs.compute(Spectra::SortRule::SmallestReal); // solve the eigen problem
+    [[maybe_unused]] int nconv = eigs.compute(Spectra::SortRule::SmallestAlge); // find smallest algebraic eigenvalues
     if (eigs.info() != Spectra::CompInfo::Successful) { // verify if the eigen search is a success
         throw std::runtime_error("Eigenvalue computation failed.");
     }
-    Eigen::VectorXcd eigenvalues = eigs.eigenvalues(); // eigenvalues of the hamiltonian
+    Eigen::VectorXd eigenvalues = eigs.eigenvalues(); // eigenvalues are real for symmetric matrices
     eigenvectors = eigs.eigenvectors(); // eigenvectors of the hamiltonian
     return eigenvalues;
 }

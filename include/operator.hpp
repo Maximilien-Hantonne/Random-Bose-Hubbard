@@ -4,8 +4,8 @@
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
 #include <Eigen/Eigenvalues>
-#include <Spectra/GenEigsSolver.h>
-#include <Spectra/MatOp/SparseGenMatProd.h>
+#include <Spectra/SymEigsSolver.h>
+#include <Spectra/MatOp/SparseSymMatProd.h>
 
 
 namespace Op
@@ -14,12 +14,12 @@ namespace Op
 // DIAGONALIZATION : 
 
     /* sort eigenvalues and eigenvectors in descending order */
-    void sort_eigen(Eigen::VectorXcd& eigenvalues, Eigen::MatrixXcd& eigenvectors);
+    void sort_eigen(Eigen::VectorXd& eigenvalues, Eigen::MatrixXcd& eigenvectors);
 
 
 // DIAGONALIZATION : 
 
-    Eigen::VectorXcd IRLM_eigen(Eigen::SparseMatrix<double> O, int nb_eigen, Eigen::MatrixXcd& eigenvectors);
+    Eigen::VectorXd IRLM_eigen(Eigen::SparseMatrix<double> O, int nb_eigen, Eigen::MatrixXcd& eigenvectors);
     Eigen::VectorXd exact_eigen(Eigen::SparseMatrix<double> O, Eigen::MatrixXd& eigenvectors);
 
 }
