@@ -112,8 +112,8 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     const int num_param2 = static_cast<int>((param2_max - param2_min) / param2_step) + 1;
     
     // Parameter values
-    const std::vector<double> param1_precomputed = precompute_params(param1_min, param1_max, num_param1, scale_type);
-    const std::vector<double> param2_precomputed = precompute_params(param2_min, param2_max, num_param2, scale_type);
+    const std::vector<double> param1_precomputed = compute_params(param1_min, param1_max, num_param1, scale_type);
+    const std::vector<double> param2_precomputed = compute_params(param2_min, param2_max, num_param2, scale_type);
 
     // Matrices initialization
     const int total_size = num_param1 * num_param2;
@@ -252,27 +252,8 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     eigen_file.close();
 }
 
-/* Compute parameter value at a given index based on scale type */
-double Analysis::compute_param(double p_min, double p_max, int idx, int num_points, ScaleType scale) {
-    if (num_points <= 1) return p_min;
-    
-    switch (scale) {
-        case ScaleType::Logarithmic: {
-            const double log_min = std::log10(p_min);
-            const double log_max = std::log10(p_max);
-            const double log_step = (log_max - log_min) / (num_points - 1);
-            return std::pow(10.0, log_min + idx * log_step);
-        }
-        case ScaleType::Linear:
-        default: {
-            const double lin_step = (p_max - p_min) / (num_points - 1);
-            return p_min + idx * lin_step;
-        }
-    }
-}
-
-/* Precompute all parameter values for a range */
-std::vector<double> Analysis::precompute_params(double p_min, double p_max, int num_points, ScaleType scale) {
+/* Compute all parameter values for a given scale */
+std::vector<double> Analysis::compute_params(double p_min, double p_max, int num_points, ScaleType scale) {
     std::vector<double> params(num_points);
     if (num_points <= 1) {
         if (num_points == 1) params[0] = p_min;
