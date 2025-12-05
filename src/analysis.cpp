@@ -27,7 +27,7 @@
         /* MAIN FUNCTIONS */
 
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double delta_U, double delta_u, int realizations) {
+void Analysis::exact_parameters(int m, int n, double T,double U, double mu, double s, double r, std::string fixed_param, double sigma_t, double delta_U, double delta_u, int realizations, std::string scale) {
     
     // Prerequisites
     if (std::abs(T-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
@@ -41,6 +41,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     // Set the geometry of the lattice
     const std::vector<std::vector<int>> nei = Neighbours::chain_neighbours(m);
     // const std::vector<std::vector<int>> nei = Neighbours::square_neighbours(m);
+    // const std::vector<std::vector<int>> nei = Neighbours::cube_neighbours(m);
 
     // // Set the matrices for each term of the Hamiltonian in the Fock states from 1 to n bosons
     // int n_min = 1, n_max = n;
@@ -62,7 +63,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     double T_min = T, T_max = T + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
 
     // Calculate the exact parameters
-    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, sigma_t, delta_U, delta_u, realizations, m, n);
+    calculate_and_save(basis, tags, TH, UH, uH, fixed_param, T, U, mu, T_min, T_max, U_min, U_max, mu_min, mu_max, s, s, scale, sigma_t, delta_U, delta_u, realizations, m, n);
 
     // End of the calculations
     std::cout << " - ";
@@ -74,7 +75,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const double sigma_T, const double delta_U, const double delta_u, const int realizations, const int m, const int n) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& TH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double T, const double U, const double mu, const double T_min, const double T_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const std::string& scale, const double sigma_T, const double delta_U, const double delta_u, const int realizations, const int m, const int n) {
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
@@ -86,7 +87,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     } else {
         file << mu << std::endl;
     }
-    file << "m " << m << " n " << n << " R " << realizations << std::endl;
+    file << "m " << m << " n " << n << " R " << realizations << " scale " << scale << std::endl;
     
     // Parameters for the calculations
     const int nb_eigen = 20;
@@ -121,21 +122,13 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     std::atomic<int> progress_counter(0);
     const int num_threads = omp_get_max_threads();
 
-    // Spacing parameters
-    const double log_param1_min = std::log10(param1_min);
-    const double log_param1_max = std::log10(param1_max);
-    const double log_param2_min = std::log10(param2_min);
-    const double log_param2_max = std::log10(param2_max);
-    const double log_param1_step = (log_param1_max - log_param1_min) / (num_param1 - 1);
-    const double log_param2_step = (log_param2_max - log_param2_min) / (num_param2 - 1);
-
     // Main loop for the calculations with parallelization
     #pragma omp parallel for collapse(2) schedule(guided)
     for (int i = 0; i < num_param1; ++i) {
         for (int j = 0; j < num_param2; ++j) {
 
-            const double param1 = std::pow(10.0, log_param1_min + i * log_param1_step);
-            const double param2 = std::pow(10.0, log_param2_min + j * log_param2_step);
+            const double param1 = compute_param(param1_min, param1_max, i, num_param1, scale);
+            const double param2 = compute_param(param2_min, param2_max, j, num_param2, scale);
             
             const double T_val = is_T_fixed ? T : param1;
             const double U_val = is_U_fixed ? U : (is_T_fixed ? param1 : param2);
@@ -236,6 +229,23 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     eigen_file.close();
 }
 
+/* Compute parameter value at a given index based on scale type */
+double Analysis::compute_param(double p_min, double p_max, int idx, int num_points, const std::string& scale) {
+    if (num_points <= 1) return p_min;
+    if (scale == "log") {
+        const double log_min = std::log10(p_min);
+        const double log_max = std::log10(p_max);
+        const double log_step = (log_max - log_min) / (num_points - 1);
+        return std::pow(10.0, log_min + idx * log_step);
+    } 
+    if (scale == "lin") { // "lin" or default
+        const double lin_step = (p_max - p_min) / (num_points - 1);
+        return p_min + idx * lin_step;
+    }
+    else {
+        throw std::invalid_argument("This scale is not implemented yet: " + scale);
+    }
+}
 
         /* GAP RATIOS */
 

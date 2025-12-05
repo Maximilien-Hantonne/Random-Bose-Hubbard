@@ -20,8 +20,12 @@ def load_phase_data():
         m = int(metadata_line[1])
         n = int(metadata_line[3])
         R = int(metadata_line[5])
+        # Read scale if present (default to 'log' for backward compatibility)
+        scale = 'log'
+        if len(metadata_line) >= 8 and metadata_line[6] == 'scale':
+            scale = metadata_line[7]
         data = np.loadtxt(file)
-    return fixed_param, fixed_value, m, n, R, data
+    return fixed_param, fixed_value, m, n, R, scale, data
 
 def get_parameter_labels(fixed_param):
     if fixed_param == "T":
@@ -48,15 +52,16 @@ def load_eigenvalues():
     sort_idx = np.argsort(ratios)
     return ratios[sort_idx], eigenvalues[sort_idx], header
 
-def plot_phase_map(x_grid, y_grid, data_grid, label, x_label, y_label, output_dir, filename, title, note=None):
+def plot_phase_map(x_grid, y_grid, data_grid, label, x_label, y_label, output_dir, filename, title, scale='log', note=None):
     plt.figure(figsize=(10, 6))
     plt.contourf(x_grid, y_grid, data_grid, levels=50, cmap='viridis')
     cbar = plt.colorbar(label=label)
     if label == 'Gap Ratio':
         cbar.ax.axhline(y=0.39, color='red', linestyle='solid', linewidth=3)
         cbar.ax.axhline(y=0.53, color='red', linestyle='solid', linewidth=3)
-    plt.xscale('log')
-    plt.yscale('log')
+    if scale == 'log':
+        plt.xscale('log')
+        plt.yscale('log')
     plt.xlim(x_grid.min(), x_grid.max())
     plt.ylim(y_grid.min(), y_grid.max())
     plt.xlabel(x_label)
@@ -72,10 +77,10 @@ def plot_eigenvalues(ratios, eigenvalues, header, output_dir):
     plt.figure(figsize=(12, 8))
     for i in range(min(10, eigenvalues.shape[1])):
         plt.plot(ratios, eigenvalues[:, i], '_', markersize=10, markeredgewidth=2)
-    plt.xscale('log')
+        plt.xscale('log')
+        plt.yscale('symlog', linthresh=10)
     y_min = np.min(eigenvalues)
     y_max = np.max(eigenvalues)
-    plt.yscale('symlog', linthresh=10)
     plt.ylim(y_min, y_max)
     xlabel = header.split()[2].replace('T', 't')
     plt.xlabel(xlabel)
@@ -89,7 +94,7 @@ def plot_eigenvalues(ratios, eigenvalues, header, output_dir):
 
 # Load data
 ratios, eigenvalues, header = load_eigenvalues()
-fixed_param, fixed_value, m, n, R, data = load_phase_data()
+fixed_param, fixed_value, m, n, R, scale, data = load_phase_data()
 x_label, y_label, non_fixed_param1, non_fixed_param2 = get_parameter_labels(fixed_param)
 
 # Extract data columns
@@ -132,15 +137,15 @@ os.makedirs(output_dir, exist_ok=True)
 plot_eigenvalues(ratios, eigenvalues, header, output_dir)
 
 plot_phase_map(x_grid, y_grid, gap_ratio_blurred, 'Gap Ratio', x_label, y_label, output_dir, 
-               'gap_ratio_plot.svg', f'Gap Ratio with respect to {x_label} and {y_label}',
+               'gap_ratio_plot.svg', f'Gap Ratio with respect to {x_label} and {y_label}', scale,
                'Note: 0.39 is for a Poissonnian distribution and 0.53 is for a Gaussian orthogonal ensemble (GOE)')
 
 plot_phase_map(x_grid, y_grid, condensate_fraction_blurred, 'Condensate Fraction', x_label, y_label, output_dir,
-               'condensate_fraction_plot.svg', f'Condensate fraction with respect to {x_label} and {y_label}')
+               'condensate_fraction_plot.svg', f'Condensate fraction with respect to {x_label} and {y_label}', scale)
 
 plot_phase_map(x_grid, y_grid, fluctuations_blurred, 'Fluctuations in Boson Number', x_label, y_label, output_dir,
-               'fluctuations_plot.svg', f'Fluctuations with respect to {x_label} and {y_label}')
+               'fluctuations_plot.svg', f'Fluctuations with respect to {x_label} and {y_label}', scale)
 
 plot_phase_map(x_grid, y_grid, qEA_blurred, 'Edwards-Anderson Order Parameter ($q_{EA}$)', x_label, y_label, output_dir,
-               'qEA_plot.svg', f'Edwards-Anderson Parameter with respect to {x_label} and {y_label}',
+               'qEA_plot.svg', f'Edwards-Anderson Parameter with respect to {x_label} and {y_label}', scale,
                f'Note: Averaged over {R} disorder realizations')

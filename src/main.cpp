@@ -23,6 +23,7 @@ void print_usage() {
               << "  -r, --range       Range for varying parameters (if range is the same for each)\n"
               << "  -s, --step        Step for varying parameters (with s < r)\n"
               << "  -f, --fixed       Fixed parameter (T, U or u)\n"
+              << "  -S, --scale       Spacing scale: 'lin' (linear) or 'log' (logarithmic, default)\n"
               << "  -t, --sigma-t     Disorder variance for hopping (default: 0.0)\n"
               << "  -V, --delta-U     Disorder half-width for interaction (default: 0.0)\n"
               << "  -v, --delta-u     Disorder half-width for chemical potential (default: 0.0)\n"
@@ -38,8 +39,9 @@ int main(int argc, char *argv[]) {
     double sigma_t = 0.0, delta_U = 0.0, delta_u = 0.0;
     int realizations = 1;
     std::string fixed_param;
+    std::string scale = "log";
 
-    const char* const short_opts = "m:n:T:U:u:r:s:f:t:V:v:R:h";
+    const char* const short_opts = "m:n:T:U:u:r:s:f:S:t:V:v:R:h";
     const option long_opts[] = {
         {"sites", required_argument, nullptr, 'm'},
         {"bosons", required_argument, nullptr, 'n'},
@@ -49,6 +51,7 @@ int main(int argc, char *argv[]) {
         {"range", required_argument, nullptr, 'r'},
         {"step", required_argument, nullptr, 's'},
         {"fixed", required_argument, nullptr, 'f'},
+        {"scale", required_argument, nullptr, 'S'},
         {"sigma-t", required_argument, nullptr, 't'},
         {"delta-U", required_argument, nullptr, 'V'},
         {"delta-u", required_argument, nullptr, 'v'},
@@ -85,6 +88,9 @@ int main(int argc, char *argv[]) {
             case 'f':
                 fixed_param = optarg;
                 break;
+            case 'S':
+                scale = optarg;
+                break;
             case 't':
                 sigma_t = std::stod(optarg);
                 break;
@@ -116,9 +122,13 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: realizations must be at least 1." << std::endl;
         return 1;
     }
+    if (scale != "lin" && scale != "log") {
+        std::cerr << "Error: scale must be 'lin' or 'log'." << std::endl;
+        return 1;
+    }
 
     // Calculate the exact parameters
-    Analysis::exact_parameters(m, n, T, U, mu, s, r, fixed_param, sigma_t, delta_U, delta_u, realizations);
+    Analysis::exact_parameters(m, n, T, U, mu, s, r, fixed_param, sigma_t, delta_U, delta_u, realizations, scale);
 
     // Execute the Python script to plot the results
     auto run_python_script = []() -> int {
