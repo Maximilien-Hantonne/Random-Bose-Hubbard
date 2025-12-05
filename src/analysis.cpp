@@ -45,7 +45,7 @@ void Analysis::exact_parameters(int m, int n, double T,double U, double mu, doub
     // // Set the matrices for each term of the Hamiltonian in the Fock states from 1 to n bosons
     // int n_min = 1, n_max = n;
     // auto [tags, basis] = BH::max_set_basis(m, n);
-    // Eigen::SparseMatrix<double> JH = BH::max_bosons_hamiltonian(nei, m, n_min, n_max, 1, 0, 0);
+    // Eigen::SparseMatrix<double> TH = BH::max_bosons_hamiltonian(nei, m, n_min, n_max, 1, 0, 0);
     // Eigen::SparseMatrix<double> UH = BH::max_bosons_hamiltonian(nei, m, n_min, n_max, 0, 1, 0);
     // Eigen::SparseMatrix<double> uH = BH::max_bosons_hamiltonian(nei, m, n_min, n_max, 0, 0, 1);
     
