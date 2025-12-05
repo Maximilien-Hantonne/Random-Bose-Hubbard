@@ -15,9 +15,9 @@ Exact diagonalization of the Bose-Hubbard Hamiltonian with disorder
 | `-r` | `--range` | Range for parameter sweep |
 | `-s` | `--step` | Step size for parameter sweep |
 | `-f` | `--fixed` | Fixed parameter (`T`, `U`, or `u`) |
-| `-t` | `--sigma-t` | Relative disorder variance for hopping (default: 0.0) |
-| `-V` | `--sigma-U` | Relative disorder variance for interaction (default: 0.0) |
-| `-v` | `--sigma-u` | Relative disorder variance for potential (default: 0.0) |
+| `-t` | `--sigma-t` | Relative disorder variance for hopping (Gaussian, default: 0.0) |
+| `-V` | `--delta-U` | Relative disorder half-width for interaction (Uniform, default: 0.0) |
+| `-v` | `--delta-u` | Relative disorder half-width for potential (Uniform, default: 0.0) |
 | `-R` | `--realizations` | Number of disorder realizations for averaging (default: 1) |
 | `-h` | `--help` | Display usage information |
 
