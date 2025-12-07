@@ -29,8 +29,6 @@ namespace BH
 
 // SORT THE HILBERT SPACE BASIS TO FACILITATE CALCULUS
 
-    /* calculate the unique tag of the kth column of the matrix */
-    double calculate_tag(const Eigen::MatrixXd& basis, const std::vector<int>& primes, int k);
     /* calculate the unique tag of a state */
     double calculate_tag(const Eigen::VectorXd& state, const std::vector<int>& primes);
 

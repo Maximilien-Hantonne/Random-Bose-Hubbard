@@ -78,15 +78,6 @@ Eigen::MatrixXd BH::init_lexicographic(int m, int n) {
 
     /* SORT THE HILBERT SPACE BASIS TO FACILITATE CALCULUS */
 
-/* Calculate the unique tag of the kth column of the matrix */
-double BH::calculate_tag(const Eigen::MatrixXd& basis, const std::vector<int>& primes, int k) {
-	double tag = 0;
-	for (int i = 0; i < basis.rows(); i++) {
-		tag += basis.coeff(i, k) * log(primes[i]);
-	}
-	return tag;
-}
-
 /* Calculate the unique tag of a state */
 double BH::calculate_tag(const Eigen::VectorXd& state, const std::vector<int>& primes) {
     double tag = 0;
@@ -101,7 +92,7 @@ double BH::calculate_tag(const Eigen::VectorXd& state, const std::vector<int>& p
 Eigen::VectorXd BH::calculate_tags(const Eigen::MatrixXd& basis, const std::vector<int>& primes) {
 	Eigen::VectorXd tags(basis.cols());
 	for (int i = 0; i < basis.cols(); i++) {
-		tags[i] = calculate_tag(basis, primes, i);
+		tags[i] = calculate_tag(basis.col(i), primes);
 	}
 	return tags;
 }
@@ -178,7 +169,7 @@ void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags,
                 if (basis.coeff(i, k) >= 0 && basis.coeff(j, k) >= 1) {
                     state[i] += 1;
                     state[j] -= 1;
-                    double x = calculate_tag(state, primes, i);
+                    double x = calculate_tag(state, primes);
                     int index = search_tag(tags, x);
                     assert(index >= 0 && index < tags.size()); // Add assertion to check index bounds
                     double value = sqrt((basis.coeff(i, k) + 1) * basis.coeff(j, k));
