@@ -8,6 +8,8 @@ figures/
 *Zone.Identifier
 *.json
 *.txt
+*.tex
+*.pdf
 !CMakeLists.txt
 
 

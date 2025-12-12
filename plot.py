@@ -2,6 +2,7 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 import os
+import shutil
 import textwrap
 import numpy as np
 import matplotlib.pyplot as plt
@@ -105,6 +106,13 @@ condensate_fraction = data[:, 3]
 fluctuations = data[:, 4]
 qEA = data[:, 5]
 
+# Normalize by fixed parameter
+if abs(fixed_value) > 1e-10:  
+    x_values = x_values / fixed_value
+    y_values = y_values / fixed_value
+    x_label = f'{x_label}/{fixed_param}'
+    y_label = f'{y_label}/{fixed_param}'
+
 # Calculate parameter ranges
 param1_min = np.min(x_values)
 param1_max = np.max(x_values)
@@ -132,6 +140,12 @@ qEA_blurred = gaussian_filter(qEA_grid, sigma=sigma)
 # Create output directory
 output_dir = f'figures/m{m}_n{n}_{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}_R{R}'
 os.makedirs(output_dir, exist_ok=True)
+
+# Copy data files to output directory
+if os.path.exists('phase.txt'):
+    shutil.copy2('phase.txt', os.path.join(output_dir, 'phase.txt'))
+if os.path.exists('eigenvalues_diagonal.txt'):
+    shutil.copy2('eigenvalues_diagonal.txt', os.path.join(output_dir, 'eigenvalues_diagonal.txt'))
 
 # Generate phase map plots
 plot_eigenvalues(ratios, eigenvalues, header, output_dir)

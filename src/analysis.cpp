@@ -39,8 +39,8 @@ void Analysis::exact_parameters(const int m, const int n, const double T, const 
     Resource::timer();
 
     // Set the geometry of the lattice
-    const std::vector<std::vector<int>> nei = Neighbours::chain_neighbours(m);
-    // const std::vector<std::vector<int>> nei = Neighbours::square_neighbours(m);
+    // const std::vector<std::vector<int>> nei = Neighbours::chain_neighbours(m);
+    const std::vector<std::vector<int>> nei = Neighbours::square_neighbours(m);
     // const std::vector<std::vector<int>> nei = Neighbours::cube_neighbours(m);
 
     // // Set the matrices for each term of the Hamiltonian in the Fock states from 1 to n bosons
