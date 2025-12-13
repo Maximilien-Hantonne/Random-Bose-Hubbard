@@ -1,6 +1,6 @@
 #include <cmath>
 #include <numeric>
-#include <stdexcept>
+#include <iostream>
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
 #include <Eigen/Eigenvalues>
@@ -36,15 +36,21 @@ void Op::sort_eigen(Eigen::VectorXd& eigenvalues, Eigen::MatrixXcd& eigenvectors
     /* IMPLICITLY RESTARTED LANCZOS METHOD (IRLM) */
 
 /* implement the IRLM for a sparse symmetric matrix to find the smallest nb_eigen eigenvalues */
-Eigen::VectorXd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen::MatrixXcd& eigenvectors) {
+Eigen::VectorXd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen::MatrixXcd& eigenvectors, bool& success) {
     SparseSymMatProd<double> op(O); // create a matrix operation object for symmetric matrix
     SymEigsSolver<SparseSymMatProd<double>> eigs(op, nb_eigen, 2 * nb_eigen+1); 
     eigs.init();
     [[maybe_unused]] int nconv = eigs.compute(Spectra::SortRule::SmallestAlge); // find smallest algebraic eigenvalues
+    Eigen::VectorXd eigenvalues;
     if (eigs.info() != Spectra::CompInfo::Successful) { // verify if the eigen search is a success
-        throw std::runtime_error("Eigenvalue computation failed.");
+        success = false;
+        std::cerr << "Warning: Eigenvalue computation failed." << std::endl;
+        eigenvalues = Eigen::VectorXd::Constant(nb_eigen, -1.0);
+        eigenvectors = Eigen::MatrixXcd::Constant(O.rows(), nb_eigen, std::complex<double>(-1.0, 0.0));
+        return eigenvalues;
     }
-    Eigen::VectorXd eigenvalues = eigs.eigenvalues(); // eigenvalues are real for symmetric matrices
+    success = true;
+    eigenvalues = eigs.eigenvalues(); // eigenvalues are real for symmetric matrices
     eigenvectors = eigs.eigenvectors(); // eigenvectors of the hamiltonian
     return eigenvalues;
 }
@@ -53,13 +59,19 @@ Eigen::VectorXd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen
     /* EXACT DIAGONALIZATION */
 
 /* Calculate the exact eigenvalues and eigenvectors of the hamiltonian by an exact diagonalization */
-Eigen::VectorXd Op::exact_eigen(Eigen::SparseMatrix<double> O, Eigen::MatrixXd& eigenvectors) {
+Eigen::VectorXd Op::exact_eigen(Eigen::SparseMatrix<double> O, Eigen::MatrixXd& eigenvectors, bool& success) {
     Eigen::MatrixXd dense_smat = Eigen::MatrixXd(O); // convert sparse matrix to dense matrix
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(dense_smat); // solve the eigen problem for the hamiltonian
+    Eigen::VectorXd eigenvalues;
     if (eigensolver.info() != Eigen::Success) { // verify if the eigen search is a success
-        throw std::runtime_error("Eigenvalue computation failed.");
+        success = false;
+        std::cerr << "Warning: Eigenvalue computation failed." << std::endl;
+        eigenvalues = Eigen::VectorXd::Constant(O.rows(), -1.0);
+        eigenvectors = Eigen::MatrixXd::Constant(O.rows(), O.cols(), -1.0);
+        return eigenvalues;
     }
+    success = true;
     eigenvectors = eigensolver.eigenvectors(); // eigenvectors of the hamiltonian
-    Eigen::VectorXd eigenvalues = eigensolver.eigenvalues(); // eigenvalues of the hamiltonian
+    eigenvalues = eigensolver.eigenvalues(); // eigenvalues of the hamiltonian
     return eigenvalues;
 }

@@ -21,20 +21,30 @@ def load_phase_data():
         m = int(metadata_line[1])
         n = int(metadata_line[3])
         R = int(metadata_line[5])
-        # Read scale if present (default to 'log' for backward compatibility)
         scale = 'log'
         if len(metadata_line) >= 8 and metadata_line[6] == 'scale':
             scale = metadata_line[7]
+        
+        # Read disorder information
+        disorder_line = file.readline().strip().split()
+        disorder_info = {}
+        if len(disorder_line) > 1:
+            for i in range(1, len(disorder_line), 2):
+                if i+1 < len(disorder_line):
+                    disorder_info[disorder_line[i]] = float(disorder_line[i+1])
+                elif disorder_line[i] == 'none':
+                    disorder_info = {'none': 0.0}
+        
         data = np.loadtxt(file)
-    return fixed_param, fixed_value, m, n, R, scale, data
+    return fixed_param, fixed_value, m, n, R, scale, disorder_info, data
 
 def get_parameter_labels(fixed_param):
-    if fixed_param == "T":
-        return 'Interaction Strength (U)', 'Chemical Potential ($\\mu$)', 'U', '$\\mu$'
+    if fixed_param == "t":
+        return 'U', '$\\mu$', 'U', '$\\mu$'
     elif fixed_param == "U":
-        return 'Hopping Parameter (t)', 'Chemical Potential ($\\mu$)', 't', '$\\mu$'
+        return 't', '$\\mu$', 't', '$\\mu$'
     elif fixed_param == "u":
-        return 'Hopping Parameter (t)', 'Interaction Strength (U)', 't', 'U'
+        return 't', 'U', 't', 'U'
     else:
         raise ValueError("Invalid fixed parameter in phase.txt")
 
@@ -74,17 +84,24 @@ def plot_phase_map(x_grid, y_grid, data_grid, label, x_label, y_label, output_di
     plt.show()
     plt.close()
 
-def plot_eigenvalues(ratios, eigenvalues, header, output_dir):
+def plot_eigenvalues(ratios, eigenvalues, header, output_dir, x_label):
     plt.figure(figsize=(12, 8))
     for i in range(min(10, eigenvalues.shape[1])):
-        plt.plot(ratios, eigenvalues[:, i], '_', markersize=10, markeredgewidth=2)
-        plt.xscale('log')
-        plt.yscale('symlog', linthresh=10)
-    y_min = np.min(eigenvalues)
-    y_max = np.max(eigenvalues)
-    plt.ylim(y_min, y_max)
-    xlabel = header.split()[2].replace('T', 't')
-    plt.xlabel(xlabel)
+        valid_mask = ~np.isnan(eigenvalues[:, i])
+        if np.any(valid_mask):
+            plt.plot(ratios[valid_mask], eigenvalues[valid_mask, i], '_', markersize=10, markeredgewidth=2)
+    plt.xscale('log')
+    plt.yscale('symlog', linthresh=10)
+    valid_eigenvalues = eigenvalues[~np.isnan(eigenvalues)]
+    if valid_eigenvalues.size > 0:
+        y_min = np.min(valid_eigenvalues)
+        y_max = np.max(valid_eigenvalues)
+        plt.ylim(y_min, y_max)
+    if header and header.startswith('# Ratio'):
+        xlabel_text = header.replace('# Ratio ', '').split(' Eigenvalues')[0]
+    else:
+        xlabel_text = 'Ratio'
+    plt.xlabel(xlabel_text)
     plt.ylabel('Energy')
     plt.title('First Eigenvalues Evolution')
     plt.grid(True, alpha=0.3, which='both')
@@ -95,7 +112,7 @@ def plot_eigenvalues(ratios, eigenvalues, header, output_dir):
 
 # Load data
 ratios, eigenvalues, header = load_eigenvalues()
-fixed_param, fixed_value, m, n, R, scale, data = load_phase_data()
+fixed_param, fixed_value, m, n, R, scale, disorder_info, data = load_phase_data()
 x_label, y_label, non_fixed_param1, non_fixed_param2 = get_parameter_labels(fixed_param)
 
 # Extract data columns
@@ -130,15 +147,46 @@ condensate_fraction_grid = condensate_fraction.reshape(len(x_unique), len(y_uniq
 fluctuations_grid = fluctuations.reshape(len(x_unique), len(y_unique)).T
 qEA_grid = qEA.reshape(len(x_unique), len(y_unique)).T
 
-# Apply smoothing
+# Apply smoothing with NaN handling
 sigma = 2
-gap_ratio_blurred = gaussian_filter(gap_ratio_grid, sigma=sigma)
-condensate_fraction_blurred = gaussian_filter(condensate_fraction_grid, sigma=sigma)
-fluctuations_blurred = gaussian_filter(fluctuations_grid, sigma=sigma)
-qEA_blurred = gaussian_filter(qEA_grid, sigma=sigma)
+
+def smooth_with_nan(data, sigma):
+    """Apply Gaussian smoothing while properly handling NaN values"""
+    # Create a mask for valid (non-NaN) data
+    valid_mask = ~np.isnan(data)
+    
+    # If all values are NaN, return the original data
+    if not np.any(valid_mask):
+        return data
+    
+    # Replace NaN with 0 for filtering
+    data_filled = np.where(valid_mask, data, 0)
+    
+    # Apply Gaussian filter to both data and mask
+    smoothed_data = gaussian_filter(data_filled, sigma=sigma)
+    smoothed_mask = gaussian_filter(valid_mask.astype(float), sigma=sigma)
+    
+    # Normalize by the smoothed mask to account for missing values
+    # Set threshold to avoid division by very small numbers
+    result = np.where(smoothed_mask > 0.01, smoothed_data / smoothed_mask, np.nan)
+    
+    return result
+
+gap_ratio_blurred = smooth_with_nan(gap_ratio_grid, sigma)
+condensate_fraction_blurred = smooth_with_nan(condensate_fraction_grid, sigma)
+fluctuations_blurred = smooth_with_nan(fluctuations_grid, sigma)
+qEA_blurred = smooth_with_nan(qEA_grid, sigma)
 
 # Create output directory
-output_dir = f'figures/m{m}_n{n}_{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}_R{R}'
+# Build disorder string for folder name
+disorder_str = ''
+if 'none' not in disorder_info and disorder_info:
+    disorder_parts = []
+    for key, value in sorted(disorder_info.items()):
+        disorder_parts.append(f'{key}_{value}')
+    disorder_str = '_' + '_'.join(disorder_parts)
+
+output_dir = f'figures/m{m}_n{n}_{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}_R{R}_{disorder_str}'
 os.makedirs(output_dir, exist_ok=True)
 
 # Copy data files to output directory
@@ -148,7 +196,7 @@ if os.path.exists('eigenvalues_diagonal.txt'):
     shutil.copy2('eigenvalues_diagonal.txt', os.path.join(output_dir, 'eigenvalues_diagonal.txt'))
 
 # Generate phase map plots
-plot_eigenvalues(ratios, eigenvalues, header, output_dir)
+plot_eigenvalues(ratios, eigenvalues, header, output_dir, x_label)
 
 plot_phase_map(x_grid, y_grid, gap_ratio_blurred, 'Gap Ratio', x_label, y_label, output_dir, 
                'gap_ratio_plot.svg', f'Gap Ratio with respect to {x_label} and {y_label}', scale,

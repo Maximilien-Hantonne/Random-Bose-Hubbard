@@ -159,7 +159,7 @@ std::pair<Eigen::VectorXd, Eigen::MatrixXd> BH::max_set_basis(int m, int n) {
     /* FILL THE HAMILTONIAN OF THE SYSTEM */
 
 /* Fill the hopping term of the Hamiltonian */
-void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double T) {
+void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double t) {
     std::vector<Eigen::Triplet<double>> tripletList;
     tripletList.reserve(basis.cols() * basis.rows() * neighbours.size());
     for (int k = 0; k < basis.cols(); k++) {
@@ -173,8 +173,8 @@ void BH::fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags,
                     int index = search_tag(tags, x);
                     assert(index >= 0 && index < tags.size()); // Add assertion to check index bounds
                     double value = sqrt((basis.coeff(i, k) + 1) * basis.coeff(j, k));
-                    tripletList.push_back(Eigen::Triplet<double>(index, k, -T * value));
-                    tripletList.push_back(Eigen::Triplet<double>(k, index, -T * value));
+                    tripletList.push_back(Eigen::Triplet<double>(index, k, -t * value));
+                    tripletList.push_back(Eigen::Triplet<double>(k, index, -t * value));
                 }
             }
         }
@@ -226,13 +226,13 @@ void BH::fill_chemical(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>
     /* HAMILTONIAN MATRICES */
 
 /* Create the Hamiltonian with a fixed number of bosons */
-Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double T, double U, double mu) {
+Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double t, double U, double mu) {
     int D = dimension(m, n);
     Eigen::SparseMatrix<double> H(D,D);
     H.setZero();
-    if (std::abs(T-0.0) > std::numeric_limits<double>::epsilon()) {
+    if (std::abs(t-0.0) > std::numeric_limits<double>::epsilon()) {
         std::vector<int> primes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97 };
-        fill_hopping(basis, tags, neighbours, primes, H, T);
+        fill_hopping(basis, tags, neighbours, primes, H, t);
     }
     else if  (std::abs(U-0.0) > std::numeric_limits<double>::epsilon()) {
         fill_interaction(basis, H, U);
@@ -241,14 +241,14 @@ Eigen::SparseMatrix<double> BH::fixed_bosons_hamiltonian(const std::vector<std::
         fill_chemical(basis, H, mu);
     }
     else{
-        std::cerr << "Error: At least one of the parameters T, U, mu must be different from zero." << std::endl;
+        std::cerr << "Error: At least one of the parameters t, U, mu must be different from zero." << std::endl;
     }
     return H;
 }
 
 
 /* Create the Hamiltonian with Fock states from 1 to n bosons */
-Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double T, double U, double mu) {
+Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double t, double U, double mu) {
     int total_dimension = 0;
     std::vector<Eigen::SparseMatrix<double>> hamiltonians;
     if (n_min < 0) {
@@ -259,7 +259,7 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
     }
     for (int bosons = n_min; bosons <= n_max; ++bosons) {
         auto [fixed_tags, fixed_basis] = fixed_set_basis(m, bosons);
-        Eigen::SparseMatrix<double> hmatrix = fixed_bosons_hamiltonian(neighbours, fixed_basis, fixed_tags, m, bosons, T, U, mu);
+        Eigen::SparseMatrix<double> hmatrix = fixed_bosons_hamiltonian(neighbours, fixed_basis, fixed_tags, m, bosons, t, U, mu);
         hamiltonians.push_back(hmatrix);
         total_dimension += hmatrix.rows();
     }
@@ -281,48 +281,48 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
 
     /* RANDOM HAMILTONIAN */
 
-Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& TH, const double T, const double sigma_T,
+Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double sigma_t,
                                                       const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                                       const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
                                                       const unsigned int seed) {
-    const int n = TH.rows();
-    const bool has_T_disorder = (sigma_T > 0.0);
+    const int n = tH.rows();
+    const bool has_t_disorder = (sigma_t > 0.0);
     const bool has_U_disorder = (delta_U > 0.0);
     const bool has_u_disorder = (delta_u > 0.0);
     
     // Without disorder
-    if (!has_T_disorder && !has_U_disorder && !has_u_disorder) {
-        return T * TH + U * UH + u * uH;
+    if (!has_t_disorder && !has_U_disorder && !has_u_disorder) {
+        return t * tH + U * UH + u * uH;
     }
     
     // With disorder
     std::vector<Eigen::Triplet<double>> triplets;
-    triplets.reserve(TH.nonZeros() + UH.nonZeros() + uH.nonZeros());
+    triplets.reserve(tH.nonZeros() + UH.nonZeros() + uH.nonZeros());
     std::mt19937 gen(seed);
     
     // Hopping term
-    if (has_T_disorder) {
-        const double stddev_T = (T != 0.0) ? sigma_T * std::abs(T) : sigma_T;
-        std::normal_distribution<double> dist_T(T, stddev_T);
+    if (has_t_disorder) {
+        const double stddev_t = (t != 0.0) ? sigma_t * std::abs(t) : sigma_t;
+        std::normal_distribution<double> dist_t(t, stddev_t);
         std::unordered_map<int64_t, double> coeff_map;
-        coeff_map.reserve(TH.nonZeros() / 2); 
+        coeff_map.reserve(tH.nonZeros() / 2); 
         
-        for (int k = 0; k < TH.outerSize(); ++k) {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(TH, k); it; ++it) {
+        for (int k = 0; k < tH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(tH, k); it; ++it) {
                 const int row = it.row();
                 const int col = it.col();
                 const int r = std::min(row, col);
                 const int c = std::max(row, col);
                 const int64_t key = (static_cast<int64_t>(r) << 32) | c;
                 const auto found = coeff_map.find(key);
-                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = dist_T(gen));
+                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = dist_t(gen));
                 triplets.emplace_back(row, col, coeff * it.value());
             }
         }
     } else {
-        for (int k = 0; k < TH.outerSize(); ++k) {
-            for (Eigen::SparseMatrix<double>::InnerIterator it(TH, k); it; ++it) {
-                triplets.emplace_back(it.row(), it.col(), T * it.value());
+        for (int k = 0; k < tH.outerSize(); ++k) {
+            for (Eigen::SparseMatrix<double>::InnerIterator it(tH, k); it; ++it) {
+                triplets.emplace_back(it.row(), it.col(), t * it.value());
             }
         }
     }

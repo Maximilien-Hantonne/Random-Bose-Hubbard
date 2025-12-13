@@ -44,7 +44,7 @@ namespace BH
 // FILL THE HAMILTONIAN OF THE SYSTEM
 
     /* fill the hopping term of the Hamiltonian */
-    static void fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double T);
+    static void fill_hopping(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const std::vector<std::vector<int>>& neighbours, const std::vector<int>& primes, Eigen::SparseMatrix<double>& hmatrix, double t);
 
     /* fill the interaction term of the Hamiltonian */
     static void fill_interaction(const Eigen::MatrixXd& basis, Eigen::SparseMatrix<double>& hmatrix, double U); 
@@ -59,13 +59,13 @@ namespace BH
     
 // HAMILTONIAN MATRICES
 
-    Eigen::SparseMatrix<double> fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double T, double U, double mu);
-    Eigen::SparseMatrix<double> max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double T, double U, double mu);
+    Eigen::SparseMatrix<double> fixed_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m, int n, double t, double U, double mu);
+    Eigen::SparseMatrix<double> max_bosons_hamiltonian(const std::vector<std::vector<int>>& neighbours, int m, int n_min, int n_max, double t, double U, double mu);
 
 // RANDOMIZE HAMILTONIAN
 
     /* Random Hamiltonian */
-    Eigen::SparseMatrix<double> random_hamiltonian(const Eigen::SparseMatrix<double>& TH, const double T, const double sigma_T,
+    Eigen::SparseMatrix<double> random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double sigma_t,
                                         const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                         const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
                                         const unsigned int seed);
