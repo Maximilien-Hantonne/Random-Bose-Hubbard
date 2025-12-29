@@ -3,6 +3,7 @@
 #include<random>
 #include<utility>
 #include<unordered_map>
+#include<cmath>
 #include<Eigen/Dense>
 #include<Eigen/SparseCore>
 
@@ -10,6 +11,49 @@
 
 
 /////  IMPLEMENTATION OF THE BH CLASS METHODS  /////
+
+
+    /* HOPPING MAP FOR EFFICIENT SPDM */
+
+/* Build the hopping map for efficient SPDM calculation.
+   This is called once and the result is read-only during parallel computation (thread-safe).
+   For each basis state k and site pair (i,j), stores the target state index and sqrt factor. */
+BH::HoppingMap BH::build_hopping_map(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m) {
+    const int D = basis.cols();
+    static const std::vector<int> primes = { 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97 };
+    
+    HoppingMap hopping_map(D);
+    
+    for (int k = 0; k < D; ++k) {
+        for (int i = 0; i < m; ++i) {
+            for (int j = 0; j < m; ++j) {
+                if (i == j) continue;  // Diagonal elements handled separately in SPDM
+                
+                const double nj = basis(j, k);
+                if (nj <= 0.0) continue;  // Can't annihilate if no particle at site j
+                
+                const double ni = basis(i, k);
+                const double factor = std::sqrt((ni + 1.0) * nj);
+                
+                // Compute the target state: a†_i a_j |k>
+                Eigen::VectorXd state = basis.col(k);
+                state(i) += 1.0;
+                state(j) -= 1.0;
+                
+                // Find the target index using tag lookup
+                const double target_tag = calculate_tag(state, primes);
+                const int target_index = search_tag(tags, target_tag);
+                
+                if (target_index >= 0 && target_index < D) {
+                    const int key = i * m + j;
+                    hopping_map[k][key] = {target_index, factor};
+                }
+            }
+        }
+    }
+    
+    return hopping_map;
+}
 
     
     /* ELEMENTARY FUNCTIONS */

@@ -149,6 +149,9 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     std::atomic<int> progress_counter(0);
     const int num_threads = omp_get_max_threads();
 
+    // Build hopping map once for efficient SPDM calculation (read-only during parallel loop, thread-safe)
+    const BH::HoppingMap hopping_map = BH::build_hopping_map(basis, tags, m);
+
     // Main loop for the calculations witHparallelization
     #pragma omp parallel for collapse(2) schedule(guided)
     for (int i = 0; i < num_param1; ++i) {
@@ -217,8 +220,8 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 // Ground state
                 const Eigen::VectorXcd& ground_state = eigenvectors.col(0);
 
-                // SPDM
-                const Eigen::MatrixXcd spdm = SPDM(basis, tags, ground_state);
+                // SPDM (using precomputed hopping map, read-only access is thread-safe)
+                const Eigen::MatrixXcd spdm = SPDM(basis, ground_state, hopping_map, m);
 
                 // Condensate fraction
                 Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm, Eigen::EigenvaluesOnly);
@@ -354,56 +357,39 @@ double Analysis::gap_ratios(const Eigen::VectorXd& eigenvalues, int nb_eigen) {
 
         /* SPDM FUNCTIONS */
 
-/* Calculate the single-particle density matrix of the system */
-Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::VectorXcd& phi0) {
-    const int m = basis.rows();
+/* Calculate the single-particle density matrix using precomputed hopping map.
+   The hopping_map is read-only, making this function thread-safe for parallel calls. */
+Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXcd& phi0, const BH::HoppingMap& hopping_map, int m) {
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
     
-    // Precompute probabilities
+    // Precompute probabilities for diagonal elements
     Eigen::VectorXd probs(D);
     for (int k = 0; k < D; ++k) {
         probs[k] = std::norm(phi0[k]);
     }
     
-    // Build hash map once for O(1) lookup
-    std::unordered_map<double, int> tag_index;
-    tag_index.reserve(D);
-    for (int k = 0; k < D; ++k) {
-        tag_index.emplace(tags[k], k);
+    // Diagonal elements: <n_i> = sum_k |c_k|^2 * n_i^(k)
+    for (int i = 0; i < m; ++i) {
+        std::complex<double> sum = 0.0;
+        for (int k = 0; k < D; ++k) {
+            sum += probs[k] * basis(i, k);
+        }
+        spdm(i, i) = sum;
     }
     
-    static constexpr int primes[] = { 2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97 };
-    static const std::vector<int> primes_vec(std::begin(primes), std::end(primes));
-    
-    for (int i = 0; i < m; ++i) {
-        for (int j = i; j < m; ++j) {
-            std::complex<double> sum = 0.0;
-            if (i == j) {
-                for (int k = 0; k < D; ++k) {
-                    sum += probs[k] * basis(i, k);
-                }
-            } else {
-                for (int k = 0; k < D; ++k) {
-                    const double ni = basis(i, k);
-                    const double nj = basis(j, k);
-                    if (nj <= 0.0) continue;
-                    const double factor = std::sqrt((ni + 1.0) * nj);
-                    Eigen::VectorXd state = basis.col(k);
-                    state(i) += 1.0;
-                    state(j) -= 1.0;
-                    const double target_tag = BH::calculate_tag(state, primes_vec);
-                    const auto it = tag_index.find(target_tag);
-                    if (it != tag_index.end()) {
-                        const int l = it->second;
-                        sum += std::conj(phi0[k]) * phi0[l] * factor;
-                    }
-                }
-            }
-            spdm(i, j) = sum;
-            if (i != j) spdm(j, i) = std::conj(sum);
+    // Off-diagonal elements using precomputed hopping map (read-only access, thread-safe)
+    for (int k = 0; k < D; ++k) {
+        const auto& k_map = hopping_map[k];
+        for (const auto& [key, entry] : k_map) {
+            const int i = key / m;
+            const int j = key % m;
+            // SPDM(i,j) = sum_k <l| a†_i a_j |k> * conj(c_l) * c_k
+            // entry gives us l (target_index) and factor = sqrt((n_i+1)*n_j)
+            spdm(i, j) += std::conj(phi0[entry.target_index]) * phi0[k] * entry.factor;
         }
     }
+    
     return spdm;
 }
 

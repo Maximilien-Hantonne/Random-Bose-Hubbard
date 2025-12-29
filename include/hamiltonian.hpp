@@ -1,12 +1,27 @@
 #pragma once
 
 #include<vector>
+#include<unordered_map>
 #include<Eigen/Dense>
 #include<Eigen/SparseCore> 
 #include "Eigen/src/Core/Matrix.h"
 
 namespace BH
 {
+
+// HOPPING MAP STRUCTURE FOR EFFICIENT SPDM CALCULATION
+// Precomputes mappings: for each (basis_index, site_i, site_j) -> (target_index, sqrt_factor)
+// This is built once and read-only during parallel computation (thread-safe)
+struct HoppingEntry {
+    int target_index;  // Index of the state after applying a†_i a_j
+    double factor;     // sqrt((n_i + 1) * n_j)
+};
+
+// HoppingMap[k] contains a map from (i*m + j) to HoppingEntry for basis state k
+using HoppingMap = std::vector<std::unordered_map<int, HoppingEntry>>;
+
+// Build the hopping map for efficient SPDM calculation (called once, used many times)
+HoppingMap build_hopping_map(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, int m);
 
 // DIMENSION OF THE HILBERT SPACE
 

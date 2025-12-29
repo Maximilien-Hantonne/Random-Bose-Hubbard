@@ -5,6 +5,7 @@
 #include <string>
 #include <Eigen/Dense>
 #include <Eigen/SparseCore>
+#include "hamiltonian.hpp"
 
 
 namespace Analysis
@@ -27,8 +28,8 @@ static double gap_ratios(const Eigen::VectorXd& eigenvalues, int nb_eigen);
 
 // SPDM FUNCTIONS
 
-/* Calculate the single-particle density matrix of the system */
-static Eigen::MatrixXcd SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::VectorXcd& phi0);
+/* Calculate the single-particle density matrix using precomputed hopping map (thread-safe read-only access) */
+static Eigen::MatrixXcd SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXcd& phi0, const BH::HoppingMap& hopping_map, int m);
 
 // MEAN OCCUPATIONS
 
