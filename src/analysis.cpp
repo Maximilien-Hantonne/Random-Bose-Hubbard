@@ -157,10 +157,10 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     std::atomic<int> progress_counter(0);
     const int num_threads = omp_get_max_threads();
 
-    // Build hopping map once for efficient SPDM calculation (read-only during parallel loop, thread-safe)
+    // Build hopping map 
     const BH::HoppingMap hopping_map = BH::build_hopping_map(basis, tags, m);
 
-    // Main loop for the calculations witHparallelization
+    // Main loop for the calculations 
     #pragma omp parallel for collapse(2) schedule(guided)
     for (int i = 0; i < num_param1; ++i) {
         for (int j = 0; j < num_param2; ++j) {
@@ -190,7 +190,6 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 thread_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
             }
             
-            // Preallocate eigenvectors matrix outside loop to avoid repeated allocation
             Eigen::MatrixXcd eigenvectors;
             
             // Loop over disorder realizations
@@ -234,7 +233,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 const Eigen::MatrixXcd spdm = SPDM(basis, ground_state, hopping_map, m);
                 const double trace = spdm.trace().real();
                 
-                // Use eigenvalues-only solver (faster than computing eigenvectors)
+                // Use eigenvalues-only solver
                 Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm, Eigen::EigenvaluesOnly);
                 sum_condensate_fraction += solver.eigenvalues().maxCoeff() / trace;
                 
@@ -368,24 +367,22 @@ double Analysis::gap_ratios(const Eigen::VectorXd& eigenvalues, int nb_eigen) {
 
         /* SPDM FUNCTIONS */
 
-/* Calculate the single-particle density matrix using precomputed hopping map.
-   The hopping_map is read-only, making this function thread-safe for parallel calls. */
+/* Calculate the single-particle density matrix */
 Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXcd& phi0, const BH::HoppingMap& hopping_map, int m) {
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
     
-    // Precompute probabilities using Eigen's vectorized operations
     const Eigen::VectorXd probs = phi0.cwiseAbs2().real();
     
-    // Diagonal elements: <n_i> = sum_k |c_k|^2 * n_i^(k) - use matrix-vector product
+    // Diagonal elements
     for (int i = 0; i < m; ++i) {
         spdm(i, i) = basis.row(i).dot(probs);
     }
     
-    // Off-diagonal elements using precomputed hopping map (read-only access, thread-safe)
+    // Off-diagonal elements
     for (int k = 0; k < D; ++k) {
         const std::complex<double> phi_k = phi0[k];
-        if (std::norm(phi_k) < 1e-30) continue;  // Skip negligible contributions
+        if (std::norm(phi_k) < 1e-30) continue;
         const auto& k_map = hopping_map[k];
         for (const auto& [key, entry] : k_map) {
             const int i = key / m;
@@ -401,17 +398,15 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
 std::tuple<double, double, Eigen::VectorXd> Analysis::mean_occupations(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
     const int m = basis.rows();
     
-    // Precompute probabilities using Eigen's vectorized abs2
     const Eigen::VectorXd probs = phi0.cwiseAbs2().real();
     
-    // Vectorized computation: site_ni = basis * probs (m x D) * (D x 1) = (m x 1)
+    // site_ni
     const Eigen::VectorXd site_ni = basis * probs;
     
-    // sum_ni = sum of all site occupations / m = total bosons / m (which is n/m)
+    // sum_ni
     const double sum_ni = site_ni.sum() / m;
     
-    // sum_ni_sq = sum over sites of <n_i^2> / m
-    // <n_i^2> = sum_k |c_k|^2 * n_i(k)^2
+    // sum_ni_sq 
     double sum_ni_sq = 0.0;
     for (int i = 0; i < m; ++i) {
         sum_ni_sq += (basis.row(i).array().square().matrix()).dot(probs);

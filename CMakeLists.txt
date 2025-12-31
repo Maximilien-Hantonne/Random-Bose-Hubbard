@@ -21,18 +21,22 @@ add_executable(${PROJECT_NAME} ${SRC_FILES})
 
 
 # ======== Optimization ========
-# Compiler optimizations
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -DNDEBUG -DEIGEN_DONT_PARALLELIZE")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffast-math -funroll-loops")
-    include(ProcessorCount)
-    ProcessorCount(N)
-    if(NOT N EQUAL 0)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto=${N}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=${N}")
-    else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -DNDEBUG -DEIGEN_DONT_PARALLELIZE -DEIGEN_NO_DEBUG -ffast-math -ffinite-math-only -funroll-loops -ftree-vectorize -fomit-frame-pointer -fno-stack-protector -finline-functions -finline-limit=1000")
+    
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        include(ProcessorCount)
+        ProcessorCount(N)
+        if(NOT N EQUAL 0)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto=${N} -fipa-pta -fdevirtualize-at-ltrans")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=${N}")
+        else()
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto -fipa-pta -fdevirtualize-at-ltrans")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto")
+        endif()
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -flto=thin")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -flto=thin")
     endif()
 endif()
 

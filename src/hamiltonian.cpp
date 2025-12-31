@@ -325,27 +325,25 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
 
     /* RANDOM HAMILTONIAN */
 
-// Helper function to generate random coefficient based on distribution type
+// Generate random coefficient based on distribution type
 inline double generate_random_coeff(std::mt19937& gen, double mean, double delta, DistributionType dist_type) {
     if (delta <= 0.0) return mean;
-    
+
     const double half_width = delta * std::abs(mean);
-    
     switch (dist_type) {
         case DistributionType::Gaussian: {
-            // For Gaussian: delta is the relative standard deviation (sigma/mean)
+            // delta is the standard deviation
             std::normal_distribution<double> dist(mean, half_width);
             return dist(gen);
         }
         case DistributionType::Uniform:
         default: {
-            // For Uniform: delta is the relative half-width
+            // delta is the relative half-width
             std::uniform_real_distribution<double> dist(mean - half_width, mean + half_width);
             return dist(gen);
         }
-        // Add new distribution cases here:
-        // case DistributionType::Lorentzian: { ... }
-        // case DistributionType::Exponential: { ... }
+        // New distributions...
+        
     }
 }
 

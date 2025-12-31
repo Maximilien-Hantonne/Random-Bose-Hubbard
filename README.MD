@@ -21,17 +21,12 @@ Exact diagonalization of the Bose-Hubbard Hamiltonian with disorder
 | `-f` | `--fixed` | Fixed parameter (`t`, `U`, or `u`) |
 | `-S` | `--scale` | Spacing scale: `lin` (linear) or `log` (logarithmic) (default : log) |
 | `-d` | `--distrib` | Disorder distribution: `uni` (uniform) or `gaus` (gaussian) (default : uni)|
-| `-T` | `--delta-t` | Relative disorder half-width for hopping (default: 0.0) |
-| `-V` | `--delta-U` | Relative disorder half-width for interaction (default: 0.0) |
-| `-v` | `--delta-u` | Relative disorder half-width for potential (default: 0.0) |
+| `-T` | `--delta-t` | Relative disorder half-width or standard deviation for hopping (default: 0.0) |
+| `-V` | `--delta-U` | Relative disorder half-width or standard deviation for interaction (default: 0.0) |
+| `-v` | `--delta-u` | Relative disorder half-width or standard deviation for potential (default: 0.0) |
 | `-R` | `--realizations` | Number of disorder realizations for averaging (default: 1) |
 | `-h` | `--help` | Display usage information |
 
-### Disorder Distribution
-
-The `delta` parameters specify the relative disorder strength:
-- **Uniform distribution** (`-d uni`): Values are drawn from `[mean - delta*|mean|, mean + delta*|mean|]`
-- **Gaussian distribution** (`-d gaus`): Values are drawn from a normal distribution with standard deviation `delta*|mean|`
 
 ## Example
 
@@ -40,12 +35,12 @@ The `delta` parameters specify the relative disorder strength:
 ./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u"
 
 # Linear scale
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -S lin
+./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -S "lin"
 
 # With uniform disorder averaging over 10 realizations
 ./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -T 0.5 -R 10
 
 # With Gaussian disorder
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -d gaus -T 0.5 -R 10
+./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -d "gaus" -T 0.5 -R 10
 ```
 
