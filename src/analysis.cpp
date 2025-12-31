@@ -6,6 +6,7 @@
 #include <iostream>
 #include <algorithm>
 #include <thread>
+#include <unordered_map>
 #include <omp.h>
 
 #include <Eigen/Dense>
@@ -157,9 +158,6 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     std::atomic<int> progress_counter(0);
     const int num_threads = omp_get_max_threads();
 
-    // Build hopping map 
-    const BH::HoppingMap hopping_map = BH::build_hopping_map(basis, tags, m);
-
     // Main loop for the calculations 
     #pragma omp parallel for collapse(2) schedule(guided)
     for (int i = 0; i < num_param1; ++i) {
@@ -230,12 +228,11 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 const Eigen::VectorXcd& ground_state = eigenvectors.col(0);
 
                 // SPDM and condensate fraction
-                const Eigen::MatrixXcd spdm = SPDM(basis, ground_state, hopping_map, m);
-                const double trace = spdm.trace().real();
+                const Eigen::MatrixXcd spdm = SPDM(basis, tags, ground_state);
                 
                 // Use eigenvalues-only solver
                 Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm, Eigen::EigenvaluesOnly);
-                sum_condensate_fraction += solver.eigenvalues().maxCoeff() / trace;
+                sum_condensate_fraction += solver.eigenvalues().maxCoeff() / spdm.trace().real();
                 
                 // Fluctuations and Edwards-Anderson parameter
                 const auto [mean_ni, mean_ni_sq, site_ni] = mean_occupations(ground_state, basis);
@@ -368,45 +365,76 @@ double Analysis::gap_ratios(const Eigen::VectorXd& eigenvalues, int nb_eigen) {
         /* SPDM FUNCTIONS */
 
 /* Calculate the single-particle density matrix */
-Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXcd& phi0, const BH::HoppingMap& hopping_map, int m) {
+Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::VectorXcd& phi0) {
+    const int m = basis.rows();
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
     
-    const Eigen::VectorXd probs = phi0.cwiseAbs2().real();
-    
-    // Diagonal elements
-    for (int i = 0; i < m; ++i) {
-        spdm(i, i) = basis.row(i).dot(probs);
+    // Precompute probabilities |c_k|^2
+    Eigen::VectorXd probs(D);
+    for (int k = 0; k < D; ++k) {
+        probs[k] = std::norm(phi0[k]);
     }
     
-    // Off-diagonal elements
+    // Build hash map once for O(1) lookup
+    std::unordered_map<double, int> tag_index;
+    tag_index.reserve(D);
     for (int k = 0; k < D; ++k) {
-        const std::complex<double> phi_k = phi0[k];
-        if (std::norm(phi_k) < 1e-30) continue;
-        const auto& k_map = hopping_map[k];
-        for (const auto& [key, entry] : k_map) {
-            const int i = key / m;
-            const int j = key % m;
-            spdm(i, j) += std::conj(phi0[entry.target_index]) * phi_k * entry.factor;
+        tag_index.emplace(tags[k], k);
+    }
+    
+    static constexpr int primes[] = {2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97};
+    static const std::vector<int> primes_vec(std::begin(primes), std::end(primes));
+    
+    for (int i = 0; i < m; ++i) {
+        for (int j = i; j < m; ++j) {
+            std::complex<double> sum = 0.0;
+            if (i == j) {
+                // Diagonal: sum_k |c_k|^2 * n_i(k)
+                sum = basis.row(i).dot(probs);
+            } else {
+                // Off-diagonal: sum_k conj(c_k) * c_l * sqrt((n_i+1)*n_j)
+                for (int k = 0; k < D; ++k) {
+                    const double ni = basis(i, k);
+                    const double nj = basis(j, k);
+                    if (nj <= 0.0) continue;
+                    const double factor = std::sqrt((ni + 1.0) * nj);
+                    Eigen::VectorXd state = basis.col(k);
+                    state(i) += 1.0;
+                    state(j) -= 1.0;
+                    const double target_tag = BH::calculate_tag(state, primes_vec);
+                    const auto it = tag_index.find(target_tag);
+                    if (it != tag_index.end()) {
+                        const int l = it->second;
+                        sum += std::conj(phi0[k]) * phi0[l] * factor;
+                    }
+                }
+            }
+            spdm(i, j) = sum;
+            if (i != j) spdm(j, i) = std::conj(sum);
         }
     }
-    
     return spdm;
 }
 
 /* Calculate site occupations: returns (spatial_avg_ni, spatial_avg_ni_sq, per_site_ni) */
 std::tuple<double, double, Eigen::VectorXd> Analysis::mean_occupations(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
     const int m = basis.rows();
+    const int D = basis.cols();
     
-    const Eigen::VectorXd probs = phi0.cwiseAbs2().real();
+    // Compute probabilities |c_k|^2
+    Eigen::VectorXd probs(D);
+    for (int k = 0; k < D; ++k) {
+        probs[k] = std::norm(phi0[k]);
+    }
     
-    // site_ni
+    // site_ni = sum_k |c_k|^2 * n_i(k)
     const Eigen::VectorXd site_ni = basis * probs;
     
-    // sum_ni
+    // sum_ni = average occupation per site
     const double sum_ni = site_ni.sum() / m;
     
-    // sum_ni_sq 
+    // sum_ni_sq = average of <n_i^2> per site
     double sum_ni_sq = 0.0;
     for (int i = 0; i < m; ++i) {
         sum_ni_sq += (basis.row(i).array().square().matrix()).dot(probs);

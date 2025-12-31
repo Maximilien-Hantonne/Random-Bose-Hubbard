@@ -22,8 +22,11 @@ def load_phase_data():
         n = int(metadata_line[3])
         R = int(metadata_line[5])
         scale = 'log'
+        distrib = 'uniform'
         if len(metadata_line) >= 8 and metadata_line[6] == 'scale':
             scale = metadata_line[7]
+        if len(metadata_line) >= 10 and metadata_line[8] == 'distrib':
+            distrib = metadata_line[9]
         
         # Read disorder information
         disorder_line = file.readline().strip().split()
@@ -36,7 +39,7 @@ def load_phase_data():
                     disorder_info = {'none': 0.0}
         
         data = np.loadtxt(file)
-    return fixed_param, fixed_value, m, n, R, scale, disorder_info, data
+    return fixed_param, fixed_value, m, n, R, scale, distrib, disorder_info, data
 
 def get_parameter_labels(fixed_param):
     if fixed_param == "t":
@@ -47,6 +50,14 @@ def get_parameter_labels(fixed_param):
         return 't', 'U', 't', 'U'
     else:
         raise ValueError("Invalid fixed parameter in phase.txt")
+
+def get_distrib_short(distrib):
+    distrib_codes = {
+        'uniform': 'u',
+        'gaussian': 'g',
+        # other new distrib...
+    }
+    return distrib_codes.get(distrib, distrib[0] if distrib else 'u')
 
 def load_eigenvalues():
     if not os.path.exists('eigenvalues_diagonal.txt'):
@@ -112,7 +123,7 @@ def plot_eigenvalues(ratios, eigenvalues, header, output_dir, x_label):
 
 # Load data
 ratios, eigenvalues, header = load_eigenvalues()
-fixed_param, fixed_value, m, n, R, scale, disorder_info, data = load_phase_data()
+fixed_param, fixed_value, m, n, R, scale, distrib, disorder_info, data = load_phase_data()
 x_label, y_label, non_fixed_param1, non_fixed_param2 = get_parameter_labels(fixed_param)
 
 # Extract data columns
@@ -184,9 +195,10 @@ if 'none' not in disorder_info and disorder_info:
     disorder_parts = []
     for key, value in sorted(disorder_info.items()):
         disorder_parts.append(f'{key}_{value}')
-    disorder_str = '_' + '_'.join(disorder_parts)
+    distrib_code = get_distrib_short(distrib)
+    disorder_str = '_' + '_'.join(disorder_parts) + f'_{distrib_code}'
 
-output_dir = f'figures/m{m}_n{n}_{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}_R{R}_{disorder_str}'
+output_dir = f'figures/m{m}_n{n}_{fixed_param}_{fixed_value}_{non_fixed_param1}_{param1_min}-{param1_max}_{non_fixed_param2}_{param2_min}-{param2_max}_R{R}{disorder_str}'
 os.makedirs(output_dir, exist_ok=True)
 
 # Copy data files to output directory
