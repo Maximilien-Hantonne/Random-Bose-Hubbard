@@ -325,29 +325,55 @@ Eigen::SparseMatrix<double> BH::max_bosons_hamiltonian(const std::vector<std::ve
 
     /* RANDOM HAMILTONIAN */
 
-Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double sigma_t,
+// Helper function to generate random coefficient based on distribution type
+inline double generate_random_coeff(std::mt19937& gen, double mean, double delta, DistributionType dist_type) {
+    if (delta <= 0.0) return mean;
+    
+    const double half_width = delta * std::abs(mean);
+    
+    switch (dist_type) {
+        case DistributionType::Gaussian: {
+            // For Gaussian: delta is the relative standard deviation (sigma/mean)
+            std::normal_distribution<double> dist(mean, half_width);
+            return dist(gen);
+        }
+        case DistributionType::Uniform:
+        default: {
+            // For Uniform: delta is the relative half-width
+            std::uniform_real_distribution<double> dist(mean - half_width, mean + half_width);
+            return dist(gen);
+        }
+        // Add new distribution cases here:
+        // case DistributionType::Lorentzian: { ... }
+        // case DistributionType::Exponential: { ... }
+    }
+}
+
+Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double delta_t,
                                                       const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                                       const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
-                                                      const unsigned int seed) {
-    const int n = tH.rows();
-    const bool has_t_disorder = (sigma_t > 0.0);
+                                                      const unsigned int seed, DistributionType dist_type) {
+    const bool has_t_disorder = (delta_t > 0.0);
     const bool has_U_disorder = (delta_U > 0.0);
     const bool has_u_disorder = (delta_u > 0.0);
     
-    // Without disorder
+    // Without disorder - use optimized Eigen sparse operations
     if (!has_t_disorder && !has_U_disorder && !has_u_disorder) {
-        return t * tH + U * UH + u * uH;
+        Eigen::SparseMatrix<double> H = t * tH;
+        H += U * UH;
+        H += u * uH;
+        return H;
     }
+    
+    const int n = tH.rows();
     
     // With disorder
     std::vector<Eigen::Triplet<double>> triplets;
     triplets.reserve(tH.nonZeros() + UH.nonZeros() + uH.nonZeros());
     std::mt19937 gen(seed);
     
-    // Hopping term
+    // Hopping term with disorder
     if (has_t_disorder) {
-        const double stddev_t = (t != 0.0) ? sigma_t * std::abs(t) : sigma_t;
-        std::normal_distribution<double> dist_t(t, stddev_t);
         std::unordered_map<int64_t, double> coeff_map;
         coeff_map.reserve(tH.nonZeros() / 2); 
         
@@ -359,7 +385,7 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
                 const int c = std::max(row, col);
                 const int64_t key = (static_cast<int64_t>(r) << 32) | c;
                 const auto found = coeff_map.find(key);
-                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = dist_t(gen));
+                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = generate_random_coeff(gen, t, delta_t, dist_type));
                 triplets.emplace_back(row, col, coeff * it.value());
             }
         }
@@ -371,15 +397,11 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
         }
     }
     
-    // Interaction term (uniform distribution)
+    // Interaction term with disorder
     if (has_U_disorder) {
-        const double half_width = delta_U * std::abs(U);
-        const double U_min = U - half_width;
-        const double U_max = U + half_width;
-        std::uniform_real_distribution<double> dist_U(U_min, U_max);
         for (int k = 0; k < UH.outerSize(); ++k) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(UH, k); it; ++it) {
-                const double coeff = dist_U(gen);
+                const double coeff = generate_random_coeff(gen, U, delta_U, dist_type);
                 triplets.emplace_back(it.row(), it.col(), coeff * it.value());
             }
         }
@@ -391,15 +413,11 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
         }
     }
     
-    // Potential term (uniform distribution)
+    // Potential term with disorder
     if (has_u_disorder) {
-        const double half_width = delta_u * std::abs(u);
-        const double u_min = u - half_width;
-        const double u_max = u + half_width;
-        std::uniform_real_distribution<double> dist_u(u_min, u_max);
         for (int k = 0; k < uH.outerSize(); ++k) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(uH, k); it; ++it) {
-                const double coeff = dist_u(gen);
+                const double coeff = generate_random_coeff(gen, u, delta_u, dist_type);
                 triplets.emplace_back(it.row(), it.col(), coeff * it.value());
             }
         }

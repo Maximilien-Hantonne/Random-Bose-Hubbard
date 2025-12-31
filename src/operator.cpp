@@ -25,18 +25,28 @@ void Op::sort_eigen(Eigen::VectorXd& eigenvalues, Eigen::MatrixXcd& eigenvectors
     std::iota(indices.begin(), indices.end(), 0);
     std::sort(indices.begin(), indices.end(), 
               [&eigenvalues](int i, int j) { return eigenvalues[i] < eigenvalues[j]; });
-    Eigen::VectorXd temp_eigenvalues = eigenvalues;
-    Eigen::MatrixXcd temp_eigenvectors = eigenvectors;
+    
+    // In-place permutation using cycle detection
+    std::vector<bool> visited(n, false);
     for (int i = 0; i < n; ++i) {
-        eigenvalues[i] = temp_eigenvalues[indices[i]];
-        eigenvectors.col(i) = temp_eigenvectors.col(indices[i]);
+        if (visited[i] || indices[i] == i) continue;
+        int j = i;
+        while (!visited[j]) {
+            visited[j] = true;
+            int next = indices[j];
+            if (next != i) {
+                std::swap(eigenvalues[j], eigenvalues[next]);
+                eigenvectors.col(j).swap(eigenvectors.col(next));
+            }
+            j = next;
+        }
     }
 }
 
     /* IMPLICITLY RESTARTED LANCZOS METHOD (IRLM) */
 
 /* implement the IRLM for a sparse symmetric matrix to find the smallest nb_eigen eigenvalues */
-Eigen::VectorXd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen::MatrixXcd& eigenvectors, bool& success) {
+Eigen::VectorXd Op::IRLM_eigen(const Eigen::SparseMatrix<double>& O, int nb_eigen, Eigen::MatrixXcd& eigenvectors, bool& success) {
     SparseSymMatProd<double> op(O); // create a matrix operation object for symmetric matrix
     SymEigsSolver<SparseSymMatProd<double>> eigs(op, nb_eigen, 2 * nb_eigen+1); 
     eigs.init();
@@ -59,7 +69,7 @@ Eigen::VectorXd Op::IRLM_eigen(Eigen::SparseMatrix<double> O,int nb_eigen, Eigen
     /* EXACT DIAGONALIZATION */
 
 /* Calculate the exact eigenvalues and eigenvectors of the hamiltonian by an exact diagonalization */
-Eigen::VectorXd Op::exact_eigen(Eigen::SparseMatrix<double> O, Eigen::MatrixXd& eigenvectors, bool& success) {
+Eigen::VectorXd Op::exact_eigen(const Eigen::SparseMatrix<double>& O, Eigen::MatrixXd& eigenvectors, bool& success) {
     Eigen::MatrixXd dense_smat = Eigen::MatrixXd(O); // convert sparse matrix to dense matrix
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eigensolver(dense_smat); // solve the eigen problem for the hamiltonian
     Eigen::VectorXd eigenvalues;

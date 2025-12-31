@@ -9,25 +9,43 @@ Exact diagonalization of the Bose-Hubbard Hamiltonian with disorder
 |--------|-----------|-------------|
 | `-m` | `--sites` | Number of lattice sites |
 | `-n` | `--bosons` | Number of bosons |
-| `-t` | `--hopping` | Hopping parameter t |
-| `-U` | `--interaction` | On-site interaction parameter U |
-| `-u` | `--potential` | Chemical potential μ |
-| `-r` | `--range` | Range for parameter sweep |
-| `-s` | `--step` | Step size for parameter sweep |
+| `-t` | `--hopping` | Hopping parameter t (initial value) |
+| `-U` | `--interaction` | On-site interaction parameter U (initial value) |
+| `-u` | `--potential` | Chemical potential μ (initial value) |
+| `-a` | `--range-t` | Range for hopping parameter t |
+| `-b` | `--range-U` | Range for interaction parameter U |
+| `-c` | `--range-u` | Range for chemical potential u |
+| `-A` | `--step-t` | Step size for hopping parameter t |
+| `-B` | `--step-U` | Step size for interaction parameter U |
+| `-C` | `--step-u` | Step size for chemical potential u |
 | `-f` | `--fixed` | Fixed parameter (`t`, `U`, or `u`) |
-| `-T` | `--sigma-t` | Relative disorder variance for hopping (Gaussian, default: 0.0) |
-| `-V` | `--delta-U` | Relative disorder half-width for interaction (Uniform, default: 0.0) |
-| `-v` | `--delta-u` | Relative disorder half-width for potential (Uniform, default: 0.0) |
+| `-S` | `--scale` | Spacing scale: `lin` (linear) or `log` (logarithmic) (default : log) |
+| `-d` | `--distrib` | Disorder distribution: `uni` (uniform) or `gaus` (gaussian) (default : uni)|
+| `-T` | `--delta-t` | Relative disorder half-width for hopping (default: 0.0) |
+| `-V` | `--delta-U` | Relative disorder half-width for interaction (default: 0.0) |
+| `-v` | `--delta-u` | Relative disorder half-width for potential (default: 0.0) |
 | `-R` | `--realizations` | Number of disorder realizations for averaging (default: 1) |
 | `-h` | `--help` | Display usage information |
+
+### Disorder Distribution
+
+The `delta` parameters specify the relative disorder strength:
+- **Uniform distribution** (`-d uni`): Values are drawn from `[mean - delta*|mean|, mean + delta*|mean|]`
+- **Gaussian distribution** (`-d gaus`): Values are drawn from a normal distribution with standard deviation `delta*|mean|`
 
 ## Example
 
 ```bash
-# Without disorder
-./BoseGlass -m 8 -n 8 -T 0.01 -U 0.01 -u 0 -r 100 -s 5 -f "u"
+# Without disorder - logarithmic scale (default)
+./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u"
 
-# With disorder averaging over 10 realizations
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -r 100 -s 5 -f "u" -T 0.5 -R 10
+# Linear scale
+./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -S lin
+
+# With uniform disorder averaging over 10 realizations
+./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -T 0.5 -R 10
+
+# With Gaussian disorder
+./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -d gaus -T 0.5 -R 10
 ```
 

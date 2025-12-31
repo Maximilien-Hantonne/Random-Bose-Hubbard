@@ -1,10 +1,33 @@
 #pragma once
 
 #include<vector>
+#include<string>
 #include<unordered_map>
 #include<Eigen/Dense>
 #include<Eigen/SparseCore> 
 #include "Eigen/src/Core/Matrix.h"
+
+// Distribution type for disorder (defined outside namespace for global access)
+enum class DistributionType {
+    Uniform,
+    Gaussian
+    // Add new distribution types here (e.g., Lorentzian, Exponential, etc.)
+};
+
+// Parse distribution type from string
+inline DistributionType parse_distribution(const std::string& dist_str) {
+    if (dist_str == "gaus") return DistributionType::Gaussian;
+    return DistributionType::Uniform;  // Default
+}
+
+// Convert distribution type to string
+inline std::string distribution_to_string(DistributionType dist) {
+    switch (dist) {
+        case DistributionType::Gaussian: return "gaussian";
+        case DistributionType::Uniform:
+        default: return "uniform";
+    }
+}
 
 namespace BH
 {
@@ -80,10 +103,10 @@ HoppingMap build_hopping_map(const Eigen::MatrixXd& basis, const Eigen::VectorXd
 // RANDOMIZE HAMILTONIAN
 
     /* Random Hamiltonian */
-    Eigen::SparseMatrix<double> random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double sigma_t,
+    Eigen::SparseMatrix<double> random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double delta_t,
                                         const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                         const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
-                                        const unsigned int seed);
+                                        const unsigned int seed, DistributionType dist_type = DistributionType::Uniform);
 
 } 
 

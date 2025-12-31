@@ -27,13 +27,16 @@
         /* MAIN FUNCTIONS */
 
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(const int m, const int n, const double t, const double U, const double mu, const double s, const double r, const std::string& fixed_param, const double sigma_t, const double delta_U, const double delta_u, const int realizations, const std::string& scale) {
+void Analysis::exact_parameters(const int m, const int n, const double t, const double U, const double mu, const double s_t, const double s_U, const double s_u, const double r_t, const double r_U, const double r_u, const std::string& fixed_param, const double delta_t, const double delta_U, const double delta_u, const int realizations, const std::string& scale, const std::string& distrib) {
     
     // Prerequisites
     if (std::abs(t-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
         std::cerr << "Error: At least one of the parameters t, U, mu must be different from zero." << std::endl;
         return;
     }
+
+    // Parse distribution type
+    const DistributionType dist_type = parse_distribution(distrib);
 
     // Start of the calculations
     Resource::timer();
@@ -60,10 +63,12 @@ void Analysis::exact_parameters(const int m, const int n, const double t, const 
     Resource::set_omp_threads(tH, 3);
 
     // Set the range of parameters for the calculations
-    double t_min = t, t_max = t + r, mu_min = mu, mu_max = mu + r, U_min = U, U_max = U + r;
+    double t_min = t, t_max = t + r_t;
+    double U_min = U, U_max = U + r_U;
+    double mu_min = mu, mu_max = mu + r_u;
 
     // Calculate the exact parameters
-    calculate_and_save(basis, tags, tH, UH, uH, fixed_param, t, U, mu, t_min, t_max, U_min, U_max, mu_min, mu_max, s, s, scale, sigma_t, delta_U, delta_u, realizations, m, n);
+    calculate_and_save(basis, tags, tH, UH, uH, fixed_param, t, U, mu, t_min, t_max, U_min, U_max, mu_min, mu_max, s_t, s_U, s_u, scale, delta_t, delta_U, delta_u, realizations, m, n, dist_type);
 
     // End of the calculations
     std::cout << " - ";
@@ -75,7 +80,7 @@ void Analysis::exact_parameters(const int m, const int n, const double t, const 
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& tH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double t, const double U, const double mu, const double t_min, const double t_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double param1_step, const double param2_step, const std::string& scale, const double sigma_t, const double delta_U, const double delta_u, const int realizations, const int m, const int n) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& tH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double t, const double U, const double mu, const double t_min, const double t_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double s_t, const double s_U, const double s_u, const std::string& scale, const double delta_t, const double delta_U, const double delta_u, const int realizations, const int m, const int n, DistributionType dist_type) {
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
@@ -87,12 +92,12 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     } else {
         file << mu << std::endl;
     }
-    file << "m " << m << " n " << n << " R " << realizations << " scale " << scale << std::endl;
+    file << "m " << m << " n " << n << " R " << realizations << " scale " << scale << " distrib " << distribution_to_string(dist_type) << std::endl;
     
     // Save disorder information
     file << "disorder";
-    if (sigma_t > 0.0) {
-        file << " sigma_t " << sigma_t;
+    if (delta_t > 0.0) {
+        file << " delta_t " << delta_t;
     }
     if (delta_U > 0.0) {
         file << " delta_U " << delta_U;
@@ -100,7 +105,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     if (delta_u > 0.0) {
         file << " delta_u " << delta_u;
     }
-    if (sigma_t <= 0.0 && delta_U <= 0.0 && delta_u <= 0.0) {
+    if (delta_t <= 0.0 && delta_U <= 0.0 && delta_u <= 0.0) {
         file << " none";
     }
     file << std::endl;
@@ -111,17 +116,20 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     const bool is_t_fixed = (fixed_param == "t");
     const bool is_U_fixed = (fixed_param == "U");
     const bool compute_qEA = (realizations > 1);
-    const bool has_disorder = (sigma_t > 0.0 || delta_U > 0.0 || delta_u > 0.0);
+    const bool has_disorder = (delta_t > 0.0 || delta_U > 0.0 || delta_u > 0.0);
 
     const double inv_r = 1.0 / realizations;
     const double inv_m = 1.0 / m;
     const ScaleType scale_type = parse_scale(scale);
 
-    // Varying parameters
-    const double param1_min = is_t_fixed ? U_min : (is_U_fixed ? t_min : t_min);
-    const double param1_max = is_t_fixed ? U_max : (is_U_fixed ? t_max : t_max);
+    // Varying parameters with their corresponding steps
+    const double param1_min = is_t_fixed ? U_min : t_min;
+    const double param1_max = is_t_fixed ? U_max : t_max;
+    const double param1_step = is_t_fixed ? s_U : s_t;
+    
     const double param2_min = is_t_fixed ? mu_min : (is_U_fixed ? mu_min : U_min);
     const double param2_max = is_t_fixed ? mu_max : (is_U_fixed ? mu_max : U_max);
+    const double param2_step = is_t_fixed ? s_u : (is_U_fixed ? s_u : s_U);
     
     // Grid sizes
     const int num_param1 = static_cast<int>((param1_max - param1_min) / param1_step) + 1;
@@ -182,16 +190,18 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 thread_hash = std::hash<std::thread::id>{}(std::this_thread::get_id());
             }
             
+            // Preallocate eigenvectors matrix outside loop to avoid repeated allocation
+            Eigen::MatrixXcd eigenvectors;
+            
             // Loop over disorder realizations
             int success_reals = 0;
             for (int real = 0; real < realizations; ++real) {
                 const unsigned int seed = has_disorder 
                     ? static_cast<unsigned int>(thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real))
                     : 0u;
-                const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(tH, t_val, sigma_t, UH, U_val, delta_U, uH, mu_val, delta_u, seed);
+                const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(tH, t_val, delta_t, UH, U_val, delta_U, uH, mu_val, delta_u, seed, dist_type);
 
                 // Diagonalization
-                Eigen::MatrixXcd eigenvectors;
                 bool eigen_success = false;
                 Eigen::VectorXd eigenvalues = Op::IRLM_eigen(H, nb_eigen, eigenvectors, eigen_success);
                 if (!eigen_success) {
@@ -220,12 +230,13 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 // Ground state
                 const Eigen::VectorXcd& ground_state = eigenvectors.col(0);
 
-                // SPDM (using precomputed hopping map, read-only access is thread-safe)
+                // SPDM and condensate fraction
                 const Eigen::MatrixXcd spdm = SPDM(basis, ground_state, hopping_map, m);
-
-                // Condensate fraction
+                const double trace = spdm.trace().real();
+                
+                // Use eigenvalues-only solver (faster than computing eigenvectors)
                 Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> solver(spdm, Eigen::EigenvaluesOnly);
-                sum_condensate_fraction += solver.eigenvalues().maxCoeff() / spdm.trace().real();
+                sum_condensate_fraction += solver.eigenvalues().maxCoeff() / trace;
                 
                 // Fluctuations and Edwards-Anderson parameter
                 const auto [mean_ni, mean_ni_sq, site_ni] = mean_occupations(ground_state, basis);
@@ -363,30 +374,23 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
     const int D = basis.cols();
     Eigen::MatrixXcd spdm = Eigen::MatrixXcd::Zero(m, m);
     
-    // Precompute probabilities for diagonal elements
-    Eigen::VectorXd probs(D);
-    for (int k = 0; k < D; ++k) {
-        probs[k] = std::norm(phi0[k]);
-    }
+    // Precompute probabilities using Eigen's vectorized operations
+    const Eigen::VectorXd probs = phi0.cwiseAbs2().real();
     
-    // Diagonal elements: <n_i> = sum_k |c_k|^2 * n_i^(k)
+    // Diagonal elements: <n_i> = sum_k |c_k|^2 * n_i^(k) - use matrix-vector product
     for (int i = 0; i < m; ++i) {
-        std::complex<double> sum = 0.0;
-        for (int k = 0; k < D; ++k) {
-            sum += probs[k] * basis(i, k);
-        }
-        spdm(i, i) = sum;
+        spdm(i, i) = basis.row(i).dot(probs);
     }
     
     // Off-diagonal elements using precomputed hopping map (read-only access, thread-safe)
     for (int k = 0; k < D; ++k) {
+        const std::complex<double> phi_k = phi0[k];
+        if (std::norm(phi_k) < 1e-30) continue;  // Skip negligible contributions
         const auto& k_map = hopping_map[k];
         for (const auto& [key, entry] : k_map) {
             const int i = key / m;
             const int j = key % m;
-            // SPDM(i,j) = sum_k <l| a†_i a_j |k> * conj(c_l) * c_k
-            // entry gives us l (target_index) and factor = sqrt((n_i+1)*n_j)
-            spdm(i, j) += std::conj(phi0[entry.target_index]) * phi0[k] * entry.factor;
+            spdm(i, j) += std::conj(phi0[entry.target_index]) * phi_k * entry.factor;
         }
     }
     
@@ -396,19 +400,23 @@ Eigen::MatrixXcd Analysis::SPDM(const Eigen::MatrixXd& basis, const Eigen::Vecto
 /* Calculate site occupations: returns (spatial_avg_ni, spatial_avg_ni_sq, per_site_ni) */
 std::tuple<double, double, Eigen::VectorXd> Analysis::mean_occupations(const Eigen::VectorXcd& phi0, const Eigen::MatrixXd& basis){
     const int m = basis.rows();
-    const int D = basis.cols();
-    double sum_ni = 0.0;
+    
+    // Precompute probabilities using Eigen's vectorized abs2
+    const Eigen::VectorXd probs = phi0.cwiseAbs2().real();
+    
+    // Vectorized computation: site_ni = basis * probs (m x D) * (D x 1) = (m x 1)
+    const Eigen::VectorXd site_ni = basis * probs;
+    
+    // sum_ni = sum of all site occupations / m = total bosons / m (which is n/m)
+    const double sum_ni = site_ni.sum() / m;
+    
+    // sum_ni_sq = sum over sites of <n_i^2> / m
+    // <n_i^2> = sum_k |c_k|^2 * n_i(k)^2
     double sum_ni_sq = 0.0;
-    Eigen::VectorXd site_ni = Eigen::VectorXd::Zero(m);
-    for (int k = 0; k < D; ++k) {
-        const double prob = std::norm(phi0[k]);
-        for (int i = 0; i < m; ++i) {
-            const double ni = basis(i, k);
-            const double prob_ni = prob * ni;
-            sum_ni += prob_ni;
-            sum_ni_sq += prob * ni * ni;
-            site_ni[i] += prob_ni;
-        }
+    for (int i = 0; i < m; ++i) {
+        sum_ni_sq += (basis.row(i).array().square().matrix()).dot(probs);
     }
-    return {sum_ni / m, sum_ni_sq / m, site_ni};
+    sum_ni_sq /= m;
+    
+    return {sum_ni, sum_ni_sq, site_ni};
 }

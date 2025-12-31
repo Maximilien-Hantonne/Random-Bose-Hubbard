@@ -17,14 +17,19 @@ void print_usage() {
               << "Options:\n"
               << "  -m, --sites       Number of sites\n"
               << "  -n, --bosons      Number of bosons\n"
-              << "  -t, --hopping     Hopping parameter\n"
-              << "  -U, --interaction On-site interaction\n"
-              << "  -u, --potential   Chemical potential\n"
-              << "  -r, --range       Range for varying parameters (if range is the same for each)\n"
-              << "  -s, --step        Step for varying parameters (with s < r)\n"
+              << "  -t, --hopping     Hopping parameter (initial value)\n"
+              << "  -U, --interaction On-site interaction (initial value)\n"
+              << "  -u, --potential   Chemical potential (initial value)\n"
+              << "  -a, --range-t     Range for hopping parameter t\n"
+              << "  -b, --range-U     Range for interaction parameter U\n"
+              << "  -c, --range-u     Range for chemical potential u\n"
+              << "  -A, --step-t      Step for hopping parameter t\n"
+              << "  -B, --step-U      Step for interaction parameter U\n"
+              << "  -C, --step-u      Step for chemical potential u\n"
               << "  -f, --fixed       Fixed parameter (t, U or u)\n"
               << "  -S, --scale       Spacing scale: 'lin' (linear) or 'log' (logarithmic, default)\n"
-              << "  -T, --sigma-t     Disorder variance for hopping (default: 0.0)\n"
+              << "  -d, --distrib     Disorder distribution: 'uni' (uniform, default) or 'gaus' (gaussian)\n"
+              << "  -T, --delta-t     Disorder half-width for hopping (default: 0.0)\n"
               << "  -V, --delta-U     Disorder half-width for interaction (default: 0.0)\n"
               << "  -v, --delta-u     Disorder half-width for chemical potential (default: 0.0)\n"
               << "  -R, --realizations Number of disorder realizations (default: 1)\n";
@@ -35,24 +40,32 @@ int main(int argc, char *argv[]) {
 
     // PARAMETERS OF THE MODEL
     int m, n;
-    double t, U, mu, s, r;
-    double sigma_t = 0.0, delta_U = 0.0, delta_u = 0.0;
+    double t, U, mu;
+    double r_t = 0.0, r_U = 0.0, r_u = 0.0;  // Separate ranges for each parameter
+    double s_t = 0.0, s_U = 0.0, s_u = 0.0;  // Separate steps for each parameter
+    double delta_t = 0.0, delta_U = 0.0, delta_u = 0.0;
     int realizations = 1;
     std::string fixed_param;
     std::string scale = "log";
+    std::string distrib = "uni";
 
-    const char* const short_opts = "m:n:t:U:u:r:s:f:S:T:V:v:R:h";
+    const char* const short_opts = "m:n:t:U:u:a:b:c:A:B:C:f:S:d:T:V:v:R:h";
     const option long_opts[] = {
         {"sites", required_argument, nullptr, 'm'},
         {"bosons", required_argument, nullptr, 'n'},
         {"hopping", required_argument, nullptr, 't'},
         {"interaction", required_argument, nullptr, 'U'},
         {"potential", required_argument, nullptr, 'u'},
-        {"range", required_argument, nullptr, 'r'},
-        {"step", required_argument, nullptr, 's'},
+        {"range-t", required_argument, nullptr, 'a'},
+        {"range-U", required_argument, nullptr, 'b'},
+        {"range-u", required_argument, nullptr, 'c'},
+        {"step-t", required_argument, nullptr, 'A'},
+        {"step-U", required_argument, nullptr, 'B'},
+        {"step-u", required_argument, nullptr, 'C'},
         {"fixed", required_argument, nullptr, 'f'},
         {"scale", required_argument, nullptr, 'S'},
-        {"sigma-t", required_argument, nullptr, 'T'},
+        {"distrib", required_argument, nullptr, 'd'},
+        {"delta-t", required_argument, nullptr, 'T'},
         {"delta-U", required_argument, nullptr, 'V'},
         {"delta-u", required_argument, nullptr, 'v'},
         {"realizations", required_argument, nullptr, 'R'},
@@ -79,11 +92,23 @@ int main(int argc, char *argv[]) {
             case 'u':
                 mu = std::stod(optarg);
                 break;
-            case 'r':
-                r = std::stod(optarg);
+            case 'a':
+                r_t = std::stod(optarg);
                 break;
-            case 's':
-                s = std::stod(optarg);
+            case 'b':
+                r_U = std::stod(optarg);
+                break;
+            case 'c':
+                r_u = std::stod(optarg);
+                break;
+            case 'A':
+                s_t = std::stod(optarg);
+                break;
+            case 'B':
+                s_U = std::stod(optarg);
+                break;
+            case 'C':
+                s_u = std::stod(optarg);
                 break;
             case 'f':
                 fixed_param = optarg;
@@ -91,8 +116,11 @@ int main(int argc, char *argv[]) {
             case 'S':
                 scale = optarg;
                 break;
+            case 'd':
+                distrib = optarg;
+                break;
             case 'T':
-                sigma_t = std::stod(optarg);
+                delta_t = std::stod(optarg);
                 break;
             case 'V':
                 delta_U = std::stod(optarg);
@@ -110,12 +138,34 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (s >= r) {
-        std::cerr << "Error: s must be smaller than r." << std::endl;
-        return 1;
-    }
     if(fixed_param != "t" && fixed_param != "U" && fixed_param != "u"){
         std::cerr << "Error: fixed parameter must be t, U or u." << std::endl;
+        return 1;
+    }
+    
+    // Validate that non-fixed parameters have ranges and steps specified
+    if (fixed_param != "t" && r_t <= 0.0) {
+        std::cerr << "Error: range for t (-a) must be specified and positive when t is not fixed." << std::endl;
+        return 1;
+    }
+    if (fixed_param != "U" && r_U <= 0.0) {
+        std::cerr << "Error: range for U (-b) must be specified and positive when U is not fixed." << std::endl;
+        return 1;
+    }
+    if (fixed_param != "u" && r_u <= 0.0) {
+        std::cerr << "Error: range for u (-c) must be specified and positive when u is not fixed." << std::endl;
+        return 1;
+    }
+    if (fixed_param != "t" && s_t <= 0.0) {
+        std::cerr << "Error: step for t (-A) must be specified and positive when t is not fixed." << std::endl;
+        return 1;
+    }
+    if (fixed_param != "U" && s_U <= 0.0) {
+        std::cerr << "Error: step for U (-B) must be specified and positive when U is not fixed." << std::endl;
+        return 1;
+    }
+    if (fixed_param != "u" && s_u <= 0.0) {
+        std::cerr << "Error: step for u (-C) must be specified and positive when u is not fixed." << std::endl;
         return 1;
     }
     if (realizations < 1) {
@@ -126,9 +176,13 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: scale must be 'lin' or 'log'." << std::endl;
         return 1;
     }
+    if (distrib != "uni" && distrib != "gaus") {
+        std::cerr << "Error: distrib must be 'uni' or 'gaus'." << std::endl;
+        return 1;
+    }
 
     // Calculate the exact parameters
-    Analysis::exact_parameters(m, n, t, U, mu, s, r, fixed_param, sigma_t, delta_U, delta_u, realizations, scale);
+    Analysis::exact_parameters(m, n, t, U, mu, s_t, s_U, s_u, r_t, r_U, r_u, fixed_param, delta_t, delta_U, delta_u, realizations, scale, distrib);
 
     // Execute the Python script to plot the results
     auto run_python_script = []() -> int {
