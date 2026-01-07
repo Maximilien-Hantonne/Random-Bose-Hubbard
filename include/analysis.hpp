@@ -11,7 +11,7 @@
 namespace Analysis
 {
 
-// Scale type enum for faster dispatch (avoid string comparison in hot loops)
+// Scale type enum for faster dispatch
 enum class ScaleType { Linear, Logarithmic };
 
 // Convert string to ScaleType

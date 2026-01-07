@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <thread>
 #include <unordered_map>
+#include <chrono>
 #include <omp.h>
 
 #include <Eigen/Dense>
@@ -158,6 +159,9 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     std::atomic<int> progress_counter(0);
     const int num_threads = omp_get_max_threads();
 
+    // Seed parameter 
+    const auto time_seed = static_cast<size_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
     // Main loop for the calculations 
     #pragma omp parallel for collapse(2) schedule(guided)
     for (int i = 0; i < num_param1; ++i) {
@@ -194,7 +198,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             int success_reals = 0;
             for (int real = 0; real < realizations; ++real) {
                 const unsigned int seed = has_disorder 
-                    ? static_cast<unsigned int>(thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real))
+                    ? static_cast<unsigned int>(time_seed ^ thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real))
                     : 0u;
                 const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(tH, t_val, delta_t, UH, U_val, delta_U, uH, mu_val, delta_u, seed, dist_type);
 
