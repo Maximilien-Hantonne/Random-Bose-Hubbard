@@ -35,14 +35,24 @@ void print_usage() {
               << "  -R, --realizations Number of disorder realizations (default: 1)\n";
 }
 
+ void copyright() {
+    std::cout << "======================================\n";
+    std::cout << "Random Bose-Hubbard\n";
+    std::cout << "Copyright (C) 2025 by Maximilien HANTONNE\n";
+    std::cout << "This program is licensed under the GNU General Public License v3.0.\n";
+    std::cout << "For more details, see the LICENSE file.\n";
+    std::cout << "======================================\n\n";
+}
 
 int main(int argc, char *argv[]) {
+
+    // copyright();
 
     // PARAMETERS OF THE MODEL
     int m, n;
     double t, U, mu;
-    double r_t = 0.0, r_U = 0.0, r_u = 0.0;  // Separate ranges for each parameter
-    double s_t = 0.0, s_U = 0.0, s_u = 0.0;  // Separate steps for each parameter
+    double r_t = 0.0, r_U = 0.0, r_u = 0.0;  // Ranges for each parameter
+    double s_t = 0.0, s_U = 0.0, s_u = 0.0;  // Steps for each parameter
     double delta_t = 0.0, delta_U = 0.0, delta_u = 0.0;
     int realizations = 1;
     std::string fixed_param;
