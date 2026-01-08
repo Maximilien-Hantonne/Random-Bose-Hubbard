@@ -44,3 +44,11 @@ Exact diagonalization of the Bose-Hubbard Hamiltonian with disorder
 ./BoseGlass -m 8 -n 8 -t 0.01 -U 0.1 -u 1 -a 1 -b 8 -A 0.01 -B 0.1 -f "u" -T 3.75 -R 10 -d "gaus"
 ```
 
+## Authors
+
+- [Maximilien HANTONNE](https://github.com/Maximilien-Hantonne)
+
+
+## License
+
+This project is licensed under the GNU GPLv3 - see [LICENCE](https://github.com/Maximilien-Hantonne/Random-Bose-Hubbard/blob/master/LICENSE) file for details.
