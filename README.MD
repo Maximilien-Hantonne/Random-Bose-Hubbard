@@ -32,16 +32,16 @@ Exact diagonalization of the Bose-Hubbard Hamiltonian with disorder
 
 ```bash
 # Without disorder - logarithmic scale (default)
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u"
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u"
 
 # Linear scale
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -S "lin"
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -S "lin"
 
 # With uniform disorder averaging over 10 realizations
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -T 0.5 -R 10
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f "u" -T 0.5 -R 10
 
 # With Gaussian disorder
-./BoseGlass -m 8 -n 8 -t 0.01 -U 0.1 -u 1 -a 1 -b 8 -A 0.01 -B 0.1 -f "u" -T 3.75 -R 10 -d "gaus"
+./RBH -m 8 -n 8 -t 0.01 -U 0.1 -u 1 -a 1 -b 8 -A 0.01 -B 0.1 -f "u" -T 3.75 -R 10 -d "gaus"
 ```
 
 ## Authors

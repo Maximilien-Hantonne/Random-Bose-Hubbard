@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20) # old CMake version
-project(BoseGlass) # name of the executable of the project
+project(RBH) # name of the executable of the project
 
 # cmake_policy(SET CMP0167 NEW)
 
