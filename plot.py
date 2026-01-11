@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('Agg')  # Use non-interactive backend to avoid blocking
 
 import os
 import shutil
@@ -92,7 +92,6 @@ def plot_phase_map(x_grid, y_grid, data_grid, label, x_label, y_label, output_di
     if note:
         plt.figtext(0.5, 0.01, note, ha='center', fontsize=9, color='red')
     plt.savefig(os.path.join(output_dir, filename))
-    plt.show()
     plt.close()
 
 def plot_eigenvalues(ratios, eigenvalues, header, output_dir, x_label):
@@ -118,7 +117,6 @@ def plot_eigenvalues(ratios, eigenvalues, header, output_dir, x_label):
     plt.grid(True, alpha=0.3, which='both')
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, 'eigenvalues_evolution.svg'), bbox_inches='tight')
-    plt.show()
     plt.close()
 
 # Load data
