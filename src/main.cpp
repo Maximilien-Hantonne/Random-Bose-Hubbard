@@ -359,11 +359,11 @@ int main(int argc, char *argv[]) {
     for (double delta_u : delta_u_list) {
     for (int realizations : realizations_list) {
         run_counter++;
-        std::cout << "\n Run " << run_counter << "/" << total_runs << "with parameters: m=" << m << ", n=" << n << ", t=" << t << ", U=" << U 
-                  << ", mu=" << mu << ", delta_t=" << delta_t << ", delta_U=" << delta_U 
-                  << ", delta_u=" << delta_u << ", R=" << realizations << std::endl;
+        std::cout << "\nRun " << run_counter << "/" << total_runs << " with parameters: m=" << m << ", n=" << n << ", t=" << t << ", U=" << U 
+                  << ", mu=" << mu << ", Δt=" << delta_t << ", ΔU=" << delta_U 
+                  << ", Δu=" << delta_u << ", R=" << realizations << std::endl;
 
-        // Calculate the exact parameters
+        // Exact calculation
         Analysis::exact_parameters(m, n, t, U, mu, s_t, s_U, s_u, r_t, r_U, r_u, fixed_param, delta_t, delta_U, delta_u, realizations, scale, distrib);
 
         // Execute the Python script to plot the results
