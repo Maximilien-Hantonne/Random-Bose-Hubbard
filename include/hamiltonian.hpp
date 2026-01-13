@@ -106,7 +106,9 @@ HoppingMap build_hopping_map(const Eigen::MatrixXd& basis, const Eigen::VectorXd
     Eigen::SparseMatrix<double> random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double delta_t,
                                         const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                         const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
-                                        const unsigned int seed, DistributionType dist_type = DistributionType::Uniform);
+                                        const unsigned int seed, DistributionType dist_type_t = DistributionType::Uniform,
+                                        DistributionType dist_type_U = DistributionType::Uniform,
+                                        DistributionType dist_type_u = DistributionType::Uniform);
 
 } 
 

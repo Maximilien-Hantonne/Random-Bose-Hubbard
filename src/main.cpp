@@ -108,32 +108,45 @@ std::vector<int> parse_int_param_list(const std::string& arg) {
     return values;
 }
 
+
+
 void print_usage() {
     std::cout << "Usage: program [options]\n"
-              << "Options:\n"
-              << "  -m, --sites       Number of sites (single, list, or range)\n"
-              << "  -n, --bosons      Number of bosons (single, list, or range)\n"
-              << "  -t, --hopping     Hopping parameter initial value (single, list, or range)\n"
-              << "  -U, --interaction On-site interaction initial value (single, list, or range)\n"
-              << "  -u, --potential   Chemical potential initial value (single, list, or range)\n"
-              << "  -a, --range-t     Range for hopping parameter t\n"
-              << "  -b, --range-U     Range for interaction parameter U\n"
-              << "  -c, --range-u     Range for chemical potential u\n"
-              << "  -A, --step-t      Step for hopping parameter t\n"
-              << "  -B, --step-U      Step for interaction parameter U\n"
-              << "  -C, --step-u      Step for chemical potential u\n"
-              << "  -f, --fixed       Fixed parameter (t, U or u)\n"
-              << "  -S, --scale       Spacing scale: 'lin' (linear) or 'log' (logarithmic, default)\n"
-              << "  -d, --distrib     Disorder distribution: 'uni' (uniform, default) or 'gaus' (gaussian)\n"
-              << "  -T, --delta-t     Disorder half-width for hopping (default: 0.0)\n"
-              << "  -V, --delta-U     Disorder half-width for interaction (default: 0.0)\n"
-              << "  -v, --delta-u     Disorder half-width for chemical potential (default: 0.0)\n"
+              << "\nSystem size:\n"
+              << "  -m, --sites        Number of sites\n"
+              << "  -n, --bosons       Number of bosons\n"
+              << "\nModel parameters:\n"
+              << "  -t, --hopping            Hopping parameter\n"
+              << "  -U, --interaction        On-site interaction\n"
+              << "  -u, --chemical-potential Chemical potential\n"
+              << "\nParameter scans:\n"
+              << "      --tr  Range for hopping t\n"
+              << "      --Ur  Range for interaction U\n"
+              << "      --ur  Range for chemical potential mu\n"
+              << "      --ts  Step for hopping t\n"
+              << "      --Us  Step for interaction U\n"
+              << "      --us  Step for chemical potential mu\n"
+              << "\nDisorder:\n"
+              << "      --tD  Disorder strength for t (default: 0.0)\n"
+              << "      --UD  Disorder strength for U (default: 0.0)\n"
+              << "      --uD  Disorder strength for mu (default: 0.0)\n"
+              << "      --tp  Probability distribution for t: 'uni' or 'gaus' (default: uni)\n"
+              << "      --Up  Probability distribution for U: 'uni' or 'gaus' (default: uni)\n"
+              << "      --up  Probability distribution for mu: 'uni' or 'gaus' (default: uni)\n"
               << "  -R, --realizations Number of disorder realizations (default: 1)\n"
+              << "\nOther options:\n"
+              << "  -f, --fixed        Fixed parameter (t, U or u)\n"
+              << "  -S, --scale        Spacing scale: 'lin' or 'log' (default: log)\n"
+              << "  -h, --help         Display this help message\n"
               << "\n"
-              << "  Parameter formats:\n"
-              << "    Single value:  -v 0.3\n"
-              << "    Comma list:    -v 0.3,0.5,0.7\n"
-              << "    Range:         -v 0.1:0.2:0.9  (start:step:end)\n"
+              << "Parameter formats:\n"
+              << "  Single value:  -t 0.3\n"
+              << "  Comma list:    -t 0.3,0.5,0.7\n"
+              << "  Range:         -t 0.1:0.2:0.9  (start:step:end)\n"
+              << "\n"
+              << "List iteration: When multiple lists are provided, iterates by index\n"
+              << "                (1st of each, 2nd of each, etc.), not all combinations.\n"
+              << "                Shorter lists repeat their last value.\n"
               << "\n";
 }
 
@@ -159,29 +172,49 @@ int main(int argc, char *argv[]) {
     std::vector<int> realizations_list;
     std::string fixed_param;
     std::string scale = "log";
-    std::string distrib = "uni";
+    std::string distrib_t = "uni";  // Distribution for t (default: uniform)
+    std::string distrib_U = "uni";  // Distribution for U (default: uniform)
+    std::string distrib_u = "uni";  // Distribution for u (default: uniform)
 
-    const char* const short_opts = "m:n:t:U:u:a:b:c:A:B:C:f:S:d:T:V:v:R:h";
+    // Define option codes for long-only options
+    enum {
+        OPT_tr = 256, // --tr (range for t)
+        OPT_Ur,       // --Ur (range for U)
+        OPT_ur,       // --ur (range for u)
+        OPT_ts,       // --ts (step for t)
+        OPT_Us,       // --Us (step for U)
+        OPT_us,       // --us (step for u)
+        OPT_tD,       // --tD (disorder strength for t)
+        OPT_UD,       // --UD (disorder strength for U)
+        OPT_uD,       // --uD (disorder strength for u)
+        OPT_tp,       // --tp (probability distribution for t)
+        OPT_Up,       // --Up (probability distribution for U)
+        OPT_up        // --up (probability distribution for u)
+    };
+
+    const char* const short_opts = "m:n:t:U:u:f:S:R:h";
     const option long_opts[] = {
         {"sites", required_argument, nullptr, 'm'},
         {"bosons", required_argument, nullptr, 'n'},
         {"hopping", required_argument, nullptr, 't'},
         {"interaction", required_argument, nullptr, 'U'},
-        {"potential", required_argument, nullptr, 'u'},
-        {"range-t", required_argument, nullptr, 'a'},
-        {"range-U", required_argument, nullptr, 'b'},
-        {"range-u", required_argument, nullptr, 'c'},
-        {"step-t", required_argument, nullptr, 'A'},
-        {"step-U", required_argument, nullptr, 'B'},
-        {"step-u", required_argument, nullptr, 'C'},
+        {"chemical-potential", required_argument, nullptr, 'u'},
+        {"tr", required_argument, nullptr, OPT_tr},
+        {"Ur", required_argument, nullptr, OPT_Ur},
+        {"ur", required_argument, nullptr, OPT_ur},
+        {"ts", required_argument, nullptr, OPT_ts},
+        {"Us", required_argument, nullptr, OPT_Us},
+        {"us", required_argument, nullptr, OPT_us},
+        {"tD", required_argument, nullptr, OPT_tD},
+        {"UD", required_argument, nullptr, OPT_UD},
+        {"uD", required_argument, nullptr, OPT_uD},
+        {"tp", required_argument, nullptr, OPT_tp},
+        {"Up", required_argument, nullptr, OPT_Up},
+        {"up", required_argument, nullptr, OPT_up},
         {"fixed", required_argument, nullptr, 'f'},
         {"scale", required_argument, nullptr, 'S'},
-        {"distrib", required_argument, nullptr, 'd'},
-        {"delta-t", required_argument, nullptr, 'T'},
-        {"delta-U", required_argument, nullptr, 'V'},
-        {"delta-u", required_argument, nullptr, 'v'},
         {"realizations", required_argument, nullptr, 'R'},
-		{"help", no_argument, nullptr, 'h'},
+        {"help", no_argument, nullptr, 'h'},
         {nullptr, no_argument, nullptr, 0}
     };
 
@@ -204,22 +237,22 @@ int main(int argc, char *argv[]) {
             case 'u':
                 mu_list = parse_param_list(optarg);
                 break;
-            case 'a':
+            case OPT_tr:
                 r_t_list = parse_param_list(optarg);
                 break;
-            case 'b':
+            case OPT_Ur:
                 r_U_list = parse_param_list(optarg);
                 break;
-            case 'c':
+            case OPT_ur:
                 r_u_list = parse_param_list(optarg);
                 break;
-            case 'A':
+            case OPT_ts:
                 s_t_list = parse_param_list(optarg);
                 break;
-            case 'B':
+            case OPT_Us:
                 s_U_list = parse_param_list(optarg);
                 break;
-            case 'C':
+            case OPT_us:
                 s_u_list = parse_param_list(optarg);
                 break;
             case 'f':
@@ -228,16 +261,22 @@ int main(int argc, char *argv[]) {
             case 'S':
                 scale = optarg;
                 break;
-            case 'd':
-                distrib = optarg;
+            case OPT_tp:
+                distrib_t = optarg;
                 break;
-            case 'T':
+            case OPT_Up:
+                distrib_U = optarg;
+                break;
+            case OPT_up:
+                distrib_u = optarg;
+                break;
+            case OPT_tD:
                 delta_t_list = parse_param_list(optarg);
                 break;
-            case 'V':
+            case OPT_UD:
                 delta_U_list = parse_param_list(optarg);
                 break;
-            case 'v':
+            case OPT_uD:
                 delta_u_list = parse_param_list(optarg);
                 break;
             case 'R':
@@ -277,41 +316,41 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     if (t_list.empty()) {
-        std::cerr << "Error: hopping parameter (-t) must be specified." << std::endl;
+        std::cerr << "Error: hopping parameter (--t) must be specified." << std::endl;
         return 1;
     }
     if (U_list.empty()) {
-        std::cerr << "Error: interaction parameter (-U) must be specified." << std::endl;
+        std::cerr << "Error: interaction parameter (--U) must be specified." << std::endl;
         return 1;
     }
     if (mu_list.empty()) {
-        std::cerr << "Error: chemical potential (-u) must be specified." << std::endl;
+        std::cerr << "Error: chemical potential (--u) must be specified." << std::endl;
         return 1;
     }
     
     // Validate ranges and steps for non-fixed parameters (check first element)
     if (fixed_param != "t" && r_t_list[0] <= 0.0) {
-        std::cerr << "Error: range for t (-a) must be specified and positive when t is not fixed." << std::endl;
+        std::cerr << "Error: range for t (--tr) must be specified and positive when t is not fixed." << std::endl;
         return 1;
     }
     if (fixed_param != "U" && r_U_list[0] <= 0.0) {
-        std::cerr << "Error: range for U (-b) must be specified and positive when U is not fixed." << std::endl;
+        std::cerr << "Error: range for U (--Ur) must be specified and positive when U is not fixed." << std::endl;
         return 1;
     }
     if (fixed_param != "u" && r_u_list[0] <= 0.0) {
-        std::cerr << "Error: range for u (-c) must be specified and positive when u is not fixed." << std::endl;
+        std::cerr << "Error: range for u (--ur) must be specified and positive when u is not fixed." << std::endl;
         return 1;
     }
     if (fixed_param != "t" && s_t_list[0] <= 0.0) {
-        std::cerr << "Error: step for t (-A) must be specified and positive when t is not fixed." << std::endl;
+        std::cerr << "Error: step for t (--ts) must be specified and positive when t is not fixed." << std::endl;
         return 1;
     }
     if (fixed_param != "U" && s_U_list[0] <= 0.0) {
-        std::cerr << "Error: step for U (-B) must be specified and positive when U is not fixed." << std::endl;
+        std::cerr << "Error: step for U (--Us) must be specified and positive when U is not fixed." << std::endl;
         return 1;
     }
     if (fixed_param != "u" && s_u_list[0] <= 0.0) {
-        std::cerr << "Error: step for u (-C) must be specified and positive when u is not fixed." << std::endl;
+        std::cerr << "Error: step for u (--us) must be specified and positive when u is not fixed." << std::endl;
         return 1;
     }
     for (int r : realizations_list) {
@@ -324,8 +363,17 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: scale must be 'lin' or 'log'." << std::endl;
         return 1;
     }
-    if (distrib != "uni" && distrib != "gaus") {
-        std::cerr << "Error: distrib must be 'uni' or 'gaus'." << std::endl;
+    // Validate distribution values
+    if (distrib_t != "uni" && distrib_t != "gaus") {
+        std::cerr << "Error: --tp must be 'uni' or 'gaus', got '" << distrib_t << "'." << std::endl;
+        return 1;
+    }
+    if (distrib_U != "uni" && distrib_U != "gaus") {
+        std::cerr << "Error: --Up must be 'uni' or 'gaus', got '" << distrib_U << "'." << std::endl;
+        return 1;
+    }
+    if (distrib_u != "uni" && distrib_u != "gaus") {
+        std::cerr << "Error: --up must be 'uni' or 'gaus', got '" << distrib_u << "'." << std::endl;
         return 1;
     }
 
@@ -334,47 +382,55 @@ int main(int argc, char *argv[]) {
         return system("python3 plot.py");
     };
 
-    // Calculate total runs and counter
-    size_t total_runs = m_list.size() * n_list.size() * t_list.size() * U_list.size() * 
-                        mu_list.size() * r_t_list.size() * r_U_list.size() * r_u_list.size() *
-                        s_t_list.size() * s_U_list.size() * s_u_list.size() * 
-                        delta_t_list.size() * delta_U_list.size() * delta_u_list.size() *
-                        realizations_list.size();
-    size_t run_counter = 0;
+    // Helper lambda to get value at index, or last value if index is out of bounds
+    auto get_or_last_double = [](const std::vector<double>& vec, size_t idx) -> double {
+        return vec[std::min(idx, vec.size() - 1)];
+    };
+    auto get_or_last_int = [](const std::vector<int>& vec, size_t idx) -> int {
+        return vec[std::min(idx, vec.size() - 1)];
+    };
 
-    // Iterate over all parameter combinations
-    for (int m : m_list) {
-    for (int n : n_list) {
-    for (double t : t_list) {
-    for (double U : U_list) {
-    for (double mu : mu_list) {
-    for (double r_t : r_t_list) {
-    for (double r_U : r_U_list) {
-    for (double r_u : r_u_list) {
-    for (double s_t : s_t_list) {
-    for (double s_U : s_U_list) {
-    for (double s_u : s_u_list) {
-    for (double delta_t : delta_t_list) {
-    for (double delta_U : delta_U_list) {
-    for (double delta_u : delta_u_list) {
-    for (int realizations : realizations_list) {
-        run_counter++;
-        std::cout << "\nRun " << run_counter << "/" << total_runs << " with parameters: m=" << m << ", n=" << n << ", t=" << t << ", U=" << U 
-                  << ", mu=" << mu << ", Δt=" << delta_t << ", ΔU=" << delta_U 
-                  << ", Δu=" << delta_u << ", R=" << realizations << std::endl;
+    // Calculate total runs as maximum list size (index-based iteration)
+    size_t total_runs = std::max({m_list.size(), n_list.size(), t_list.size(), U_list.size(), 
+                        mu_list.size(), r_t_list.size(), r_U_list.size(), r_u_list.size(),
+                        s_t_list.size(), s_U_list.size(), s_u_list.size(), 
+                        delta_t_list.size(), delta_U_list.size(), delta_u_list.size(),
+                        realizations_list.size()});
 
-        // Exact calculation
-        Analysis::exact_parameters(m, n, t, U, mu, s_t, s_U, s_u, r_t, r_U, r_u, fixed_param, delta_t, delta_U, delta_u, realizations, scale, distrib);
+    // Iterate by index (not all combinations)
+    for (size_t run_idx = 0; run_idx < total_runs; ++run_idx) {
+        int m = get_or_last_int(m_list, run_idx);
+        int n = get_or_last_int(n_list, run_idx);
+        double t = get_or_last_double(t_list, run_idx);
+        double U = get_or_last_double(U_list, run_idx);
+        double mu = get_or_last_double(mu_list, run_idx);
+        double r_t = get_or_last_double(r_t_list, run_idx);
+        double r_U = get_or_last_double(r_U_list, run_idx);
+        double r_u = get_or_last_double(r_u_list, run_idx);
+        double s_t = get_or_last_double(s_t_list, run_idx);
+        double s_U = get_or_last_double(s_U_list, run_idx);
+        double s_u = get_or_last_double(s_u_list, run_idx);
+        double delta_t = get_or_last_double(delta_t_list, run_idx);
+        double delta_U = get_or_last_double(delta_U_list, run_idx);
+        double delta_u = get_or_last_double(delta_u_list, run_idx);
+        int realizations = get_or_last_int(realizations_list, run_idx);
+
+        // Build progress prefix for this run
+        std::string run_prefix = "Run " + std::to_string(run_idx + 1) + "/" + std::to_string(total_runs) + " - ";
+        std::cout << "\n" << run_prefix << std::flush;
+
+        // Exact calculations
+        Analysis::exact_parameters(m, n, t, U, mu, s_t, s_U, s_u, r_t, r_U, r_u, fixed_param, delta_t, delta_U, delta_u, realizations, scale, distrib_t, distrib_U, distrib_u, run_prefix);
 
         // Execute the Python script to plot the results
         std::future<int> result = std::async(std::launch::async, run_python_script);
         if (result.get() != 0) {
-            std::cerr << "Error when executing Python script for run " << run_counter << "." << std::endl;
+            std::cerr << "Error when executing Python script for run " << (run_idx + 1) << "." << std::endl;
             // Continue to next iteration instead of returning
         }
-    }}}}}}}}}}}}}}}
+    }
 
-    std::cout << "\nAll " << total_runs << " runs finished !" << std::endl;
+    std::cout << "\nAll runs finished " << std::endl;
 
     return 0;
 }

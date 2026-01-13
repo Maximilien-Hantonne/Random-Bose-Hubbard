@@ -350,7 +350,8 @@ inline double generate_random_coeff(std::mt19937& gen, double mean, double delta
 Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<double>& tH, const double t, const double delta_t,
                                                       const Eigen::SparseMatrix<double>& UH, const double U, const double delta_U,
                                                       const Eigen::SparseMatrix<double>& uH, const double u, const double delta_u,
-                                                      const unsigned int seed, DistributionType dist_type) {
+                                                      const unsigned int seed, DistributionType dist_type_t,
+                                                      DistributionType dist_type_U, DistributionType dist_type_u) {
     const bool has_t_disorder = (delta_t > 0.0);
     const bool has_U_disorder = (delta_U > 0.0);
     const bool has_u_disorder = (delta_u > 0.0);
@@ -383,7 +384,7 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
                 const int c = std::max(row, col);
                 const int64_t key = (static_cast<int64_t>(r) << 32) | c;
                 const auto found = coeff_map.find(key);
-                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = generate_random_coeff(gen, t, delta_t, dist_type));
+                const double coeff = (found != coeff_map.end()) ? found->second : (coeff_map[key] = generate_random_coeff(gen, t, delta_t, dist_type_t));
                 triplets.emplace_back(row, col, coeff * it.value());
             }
         }
@@ -399,7 +400,7 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
     if (has_U_disorder) {
         for (int k = 0; k < UH.outerSize(); ++k) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(UH, k); it; ++it) {
-                const double coeff = generate_random_coeff(gen, U, delta_U, dist_type);
+                const double coeff = generate_random_coeff(gen, U, delta_U, dist_type_U);
                 triplets.emplace_back(it.row(), it.col(), coeff * it.value());
             }
         }
@@ -415,7 +416,7 @@ Eigen::SparseMatrix<double> BH::random_hamiltonian(const Eigen::SparseMatrix<dou
     if (has_u_disorder) {
         for (int k = 0; k < uH.outerSize(); ++k) {
             for (Eigen::SparseMatrix<double>::InnerIterator it(uH, k); it; ++it) {
-                const double coeff = generate_random_coeff(gen, u, delta_u, dist_type);
+                const double coeff = generate_random_coeff(gen, u, delta_u, dist_type_u);
                 triplets.emplace_back(it.row(), it.col(), coeff * it.value());
             }
         }

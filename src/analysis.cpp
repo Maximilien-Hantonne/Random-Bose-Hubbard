@@ -29,7 +29,7 @@
         /* MAIN FUNCTIONS */
 
 /*main function for exact calculations parameters*/
-void Analysis::exact_parameters(const int m, const int n, const double t, const double U, const double mu, const double s_t, const double s_U, const double s_u, const double r_t, const double r_U, const double r_u, const std::string& fixed_param, const double delta_t, const double delta_U, const double delta_u, const int realizations, const std::string& scale, const std::string& distrib) {
+void Analysis::exact_parameters(const int m, const int n, const double t, const double U, const double mu, const double s_t, const double s_U, const double s_u, const double r_t, const double r_U, const double r_u, const std::string& fixed_param, const double delta_t, const double delta_U, const double delta_u, const int realizations, const std::string& scale, const std::string& distrib_t, const std::string& distrib_U, const std::string& distrib_u, const std::string& run_prefix) {
     
     // Prerequisites
     if (std::abs(t-0.0) < std::numeric_limits<double>::epsilon() && std::abs(U-0.0) < std::numeric_limits<double>::epsilon() && std::abs(mu-0.0) < std::numeric_limits<double>::epsilon()) {
@@ -37,8 +37,10 @@ void Analysis::exact_parameters(const int m, const int n, const double t, const 
         return;
     }
 
-    // Parse distribution type
-    const DistributionType dist_type = parse_distribution(distrib);
+    // Parse distribution types for each parameter
+    const DistributionType dist_type_t = parse_distribution(distrib_t);
+    const DistributionType dist_type_U = parse_distribution(distrib_U);
+    const DistributionType dist_type_u = parse_distribution(distrib_u);
 
     // Start of the calculations
     Resource::timer();
@@ -70,7 +72,7 @@ void Analysis::exact_parameters(const int m, const int n, const double t, const 
     double mu_min = mu, mu_max = mu + r_u;
 
     // Calculate the exact parameters
-    calculate_and_save(basis, tags, tH, UH, uH, fixed_param, t, U, mu, t_min, t_max, U_min, U_max, mu_min, mu_max, s_t, s_U, s_u, scale, delta_t, delta_U, delta_u, realizations, m, n, dist_type);
+    calculate_and_save(basis, tags, tH, UH, uH, fixed_param, t, U, mu, t_min, t_max, U_min, U_max, mu_min, mu_max, s_t, s_U, s_u, scale, delta_t, delta_U, delta_u, realizations, m, n, dist_type_t, dist_type_U, dist_type_u, run_prefix);
 
     // End of the calculations
     std::cout << " - ";
@@ -82,7 +84,12 @@ void Analysis::exact_parameters(const int m, const int n, const double t, const 
 
 
 /* calculate and save gap ratio and other quantities */
-void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& tH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double t, const double U, const double mu, const double t_min, const double t_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double s_t, const double s_U, const double s_u, const std::string& scale, const double delta_t, const double delta_U, const double delta_u, const int realizations, const int m, const int n, DistributionType dist_type) {
+void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::VectorXd& tags, const Eigen::SparseMatrix<double>& tH, const Eigen::SparseMatrix<double>& UH, const Eigen::SparseMatrix<double>& uH, const std::string& fixed_param, const double t, const double U, const double mu, const double t_min, const double t_max, const double U_min, const double U_max, const double mu_min, const double mu_max, const double s_t, const double s_U, const double s_u, const std::string& scale, const double delta_t, const double delta_U, const double delta_u, const int realizations, const int m, const int n, DistributionType dist_type_t, DistributionType dist_type_U, DistributionType dist_type_u, const std::string& run_prefix) {
+    
+    // Helper to convert distribution type to short code
+    auto dist_to_code = [](DistributionType dt) -> std::string {
+        return (dt == DistributionType::Gaussian) ? "gaus" : "uni";
+    };
     
     // Save the fixed parameter and value in a file
     std::ofstream file("phase.txt");
@@ -94,18 +101,18 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
     } else {
         file << mu << std::endl;
     }
-    file << "m " << m << " n " << n << " R " << realizations << " scale " << scale << " distrib " << distribution_to_string(dist_type) << std::endl;
+    file << "m " << m << " n " << n << " R " << realizations << " scale " << scale << std::endl;
     
-    // Save disorder information
+    // Save disorder information with new naming convention
     file << "disorder";
     if (delta_t > 0.0) {
-        file << " delta_t " << delta_t;
+        file << " tD " << delta_t << " tp " << dist_to_code(dist_type_t);
     }
     if (delta_U > 0.0) {
-        file << " delta_U " << delta_U;
+        file << " UD " << delta_U << " Up " << dist_to_code(dist_type_U);
     }
     if (delta_u > 0.0) {
-        file << " delta_u " << delta_u;
+        file << " uD " << delta_u << " up " << dist_to_code(dist_type_u);
     }
     if (delta_t <= 0.0 && delta_U <= 0.0 && delta_u <= 0.0) {
         file << " none";
@@ -200,7 +207,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
                 const unsigned int seed = has_disorder 
                     ? static_cast<unsigned int>(time_seed ^ thread_hash ^ (static_cast<size_t>(i) << 32) ^ (static_cast<size_t>(j) << 16) ^ static_cast<size_t>(real))
                     : 0u;
-                const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(tH, t_val, delta_t, UH, U_val, delta_U, uH, mu_val, delta_u, seed, dist_type);
+                const Eigen::SparseMatrix<double> H = BH::random_hamiltonian(tH, t_val, delta_t, UH, U_val, delta_U, uH, mu_val, delta_u, seed, dist_type_t, dist_type_U, dist_type_u);
 
                 // Diagonalization
                 bool eigen_success = false;
@@ -291,7 +298,7 @@ void Analysis::calculate_and_save(const Eigen::MatrixXd& basis, const Eigen::Vec
             const int local_count = progress_counter.fetch_add(1) + 1;
             if (local_count % 10 == 0 || local_count == total_size) {
                 const int percent = (local_count * 100) / total_size;
-                std::cout << "\r" << num_threads << " threads - " << percent << "%" << std::flush;
+                std::cout << "\r" << run_prefix << num_threads << " threads - " << percent << "%" << std::flush;
             }
         }
     }

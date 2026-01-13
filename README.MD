@@ -5,26 +5,50 @@ Exact diagonalization of the Bose-Hubbard Hamiltonian with or without disorder
 
 ## Options
 
+### System Size
+
 | Option | Long Form | Description |
 |--------|-----------|-------------|
 | `-m` | `--sites` | Number of lattice sites |
 | `-n` | `--bosons` | Number of bosons |
-| `-t` | `--hopping` | Hopping parameter t initial value |
-| `-U` | `--interaction` | On-site interaction parameter U initial value |
-| `-u` | `--potential` | Chemical potential μ initial value |
-| `-a` | `--range-t` | Range for hopping parameter t |
-| `-b` | `--range-U` | Range for interaction parameter U |
-| `-c` | `--range-u` | Range for chemical potential u |
-| `-A` | `--step-t` | Step size for hopping parameter t |
-| `-B` | `--step-U` | Step size for interaction parameter U |
-| `-C` | `--step-u` | Step size for chemical potential u |
+
+### Model Parameters
+
+| Option | Long Form | Description |
+|--------|-----------|-------------|
+| `-t` | `--hopping` | Hopping parameter t |
+| `-U` | `--interaction` | On-site interaction parameter U |
+| `-u` | `--chemical-potential` | Chemical potential μ |
+
+### Parameter Scans
+
+| Long Form | Description |
+|-----------|-------------|
+| `--tr` | Range for hopping parameter t |
+| `--Ur` | Range for interaction parameter U |
+| `--ur` | Range for chemical potential μ |
+| `--ts` | Step size for hopping parameter t |
+| `--Us` | Step size for interaction parameter U |
+| `--us` | Step size for chemical potential μ |
+
+### Disorder
+
+| Long Form | Description |
+|-----------|-------------|
+| `--tD` | Disorder strength for t (default: 0.0) |
+| `--UD` | Disorder strength for U (default: 0.0) |
+| `--uD` | Disorder strength for μ (default: 0.0) |
+| `--tp` | Probability distribution for t: `uni` or `gaus` (default: uni) |
+| `--Up` | Probability distribution for U: `uni` or `gaus` (default: uni) |
+| `--up` | Probability distribution for μ: `uni` or `gaus` (default: uni) |
+| `-R`, `--realizations` | Number of disorder realizations for averaging (default: 1) |
+
+### Other Options
+
+| Option | Long Form | Description |
+|--------|-----------|-------------|
 | `-f` | `--fixed` | Fixed parameter (`t`, `U`, or `u`) |
-| `-S` | `--scale` | Spacing scale: `lin` (linear) or `log` (logarithmic) (default : log) |
-| `-d` | `--distrib` | Disorder distribution: `uni` (uniform) or `gaus` (gaussian) (default : uni)|
-| `-T` | `--delta-t` | Relative disorder half-width or standard deviation for hopping (default: 0.0) |
-| `-V` | `--delta-U` | Relative disorder half-width or standard deviation for interaction (default: 0.0) |
-| `-v` | `--delta-u` | Relative disorder half-width or standard deviation for potential (default: 0.0) |
-| `-R` | `--realizations` | Number of disorder realizations for averaging (default: 1) |
+| `-S` | `--scale` | Spacing scale: `lin` or `log` (default: log) |
 | `-h` | `--help` | Display usage information |
 
 
@@ -44,7 +68,7 @@ All numeric parameters support three formats for specifying multiple values. Whe
 
 The range syntax `start:step:end` generates values from `start` to `end` (inclusive) with increment `step`:
 - `-m 6:2:10` → sites: 6, 8, 10
-- `-v 0.0:0.1:0.5` → disorder: 0.0, 0.1, 0.2, 0.3, 0.4, 0.5
+- `--tD 0.0:0.1:0.5` → disorder: 0.0, 0.1, 0.2, 0.3, 0.4, 0.5
 - `-R 1:5:21` → realizations: 1, 6, 11, 16, 21
 
 **Note:** No quotes needed for comma-separated nor range syntax.
@@ -54,28 +78,31 @@ The range syntax `start:step:end` generates values from `start` to `end` (inclus
 
 ```bash
 # Without disorder - logarithmic scale (default)
-./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u
 
 # Linear scale
-./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u -S lin
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u -S lin
 
 # With uniform disorder averaging over 10 realizations
-./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u -T 0.5 -R 10
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u --tD 0.5 -R 10
 
-# With Gaussian disorder
-./RBH -m 8 -n 8 -t 0.01 -U 0.1 -u 1 -a 1 -b 8 -A 0.01 -B 0.1 -f u -T 3.75 -R 10 -d gaus
+# With Gaussian disorder on t only
+./RBH -m 8 -n 8 -t 0.01 -U 0.1 -u 1 --tr 1 --Ur 8 --ts 0.01 --Us 0.1 -f u --tD 3.75 -R 10 --tp gaus
+
+# With different distributions: Gaussian for t, uniform for U
+./RBH -m 8 -n 8 -t 0.01 -U 0.1 -u 1 --tr 1 --Ur 8 --ts 0.01 --Us 0.1 -f u --tD 0.5 --UD 0.3 -R 10 --tp gaus --Up uni
 
 # Using comma-separated list - runs for 3 disorder values
-./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u -v 0.3,0.5,0.7 -R 10
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u --uD 0.3,0.5,0.7 -R 10
 
 # Using range syntax - sweep disorder from 0.0 to 1.0 in steps of 0.2
-./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u -v 0.0:0.2:1.0 -R 10
+./RBH -m 8 -n 8 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u --uD 0.0:0.2:1.0 -R 10
 
-# Multiple parameters with ranges - runs for all combinations (2 × 3 = 6 runs)
-./RBH -m 8,9 -n 8,9 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u -v 0.1:0.2:0.5 -R 5
+# Multiple parameters with lists - iterates by index (2 runs total)
+./RBH -m 8,9 -n 8,9 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u --uD 0.1,0.3 -R 5
 
 # System size sweep
-./RBH -m 6:1:10 -n 6:1:10 -t 0.01 -U 0.01 -u 0 -a 10 -b 10 -A 0.5 -B 0.5 -f u
+./RBH -m 6:1:10 -n 6:1:10 -t 0.01 -U 0.01 -u 0 --tr 10 --Ur 10 --ts 0.5 --Us 0.5 -f u
 ```
 
 ## Authors
