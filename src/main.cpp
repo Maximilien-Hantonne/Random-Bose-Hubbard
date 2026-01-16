@@ -161,7 +161,7 @@ void print_usage() {
 
 int main(int argc, char *argv[]) {
 
-    // copyright();
+    copyright();
 
     // PARAMETERS OF THE MODEL - now stored as vectors
     std::vector<int> m_list, n_list;
