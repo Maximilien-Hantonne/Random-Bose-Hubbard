@@ -1,6 +1,14 @@
 # Random Bose-Hubbard Model
 
-Exact diagonalization of the Bose-Hubbard Hamiltonian with or without disorder
+<div align="center">
+    <a href="https://github.com/Maximilien-Hantonne/Random-Bose-Hubbard">
+        <img src="https://github.com/Maximilien-Hantonne/Random-Bose-Hubbard/blob/master/figures/off_diagonal_on_diagonal_disorder.JPG" alt="Random-Bose-Hubbard phase diagram" width="350">
+    </a>
+    <h3 align="center"> Transitions of the Random Bose Hubbard model</h3>
+    <p align="center">
+        An implementation of the Random Bose Hubbard model with exact diagonalization to characterize the phase diagram of the system.
+    </p>
+</div>
 
 
 ## Options
@@ -107,7 +115,7 @@ The range syntax `start:step:end` generates values from `start` to `end` (inclus
 
 ## Authors
 
-- [Maximilien HANTONNE](https://github.com/Maximilien-Hantonne)
+[Maximilien HANTONNE](https://github.com/Maximilien-Hantonne)
 
 
 ## License
