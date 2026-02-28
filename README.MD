@@ -2,7 +2,7 @@
 
 <div align="center">
     <a href="https://github.com/Maximilien-Hantonne/Random-Bose-Hubbard">
-        <img src="https://github.com/Maximilien-Hantonne/Random-Bose-Hubbard/blob/master/figures/off_diagonal_on_diagonal_disorder.JPG" alt="Random-Bose-Hubbard phase diagram" width="350">
+        <img src="https://github.com/Maximilien-Hantonne/Random-Bose-Hubbard/blob/master/figures/off_diagonal_on_diagonal_disorder.JPG" alt="Random-Bose-Hubbard phase diagram" width="550">
     </a>
     <h3 align="center"> Transitions of the Random Bose Hubbard model</h3>
     <p align="center">
